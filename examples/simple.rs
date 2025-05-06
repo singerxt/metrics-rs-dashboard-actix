@@ -1,8 +1,18 @@
-use metrics_actix_dashboard::hello_world;
+use actix_web::{web, App, HttpServer, Responder, HttpResponse};
 
+async fn hello() -> impl Responder {
+    HttpResponse::Ok().body("Hello from Actix-Web!")
+}
 
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    println!("Starting server at http://127.0.0.1:8080");
 
-#[tokio::main]
-async fn main() {
-    hello_world().await;
+    HttpServer::new(|| {
+        App::new()
+            .route("/", web::get().to(hello))
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
 }
