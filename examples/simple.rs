@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread};
 
-use actix_web::{web, App, HttpServer, Responder, HttpResponse};
+use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
+use metrics::{counter, describe_counter};
 use metrics_actix_dashboard::create_metrics_actx_scope;
 
 async fn hello() -> impl Responder {
@@ -12,6 +13,25 @@ async fn hello() -> impl Responder {
 async fn main() -> std::io::Result<()> {
     env_logger::init();
     info!("Starting Actix-Web server with metrics at /metrics");
+
+    thread::spawn(|| {
+        describe_counter!("real_time", "Real time counter");
+
+        loop {
+            thread::sleep(std::time::Duration::from_secs(1));
+            counter!("real_time").increment(1);
+        }
+    });
+
+    tokio::spawn(async {
+        describe_counter!("async_counter", "Async counter");
+
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            counter!("async_counter").increment(1);
+        }
+    });
+
     HttpServer::new(|| {
         let metrics_actix_dashboard = create_metrics_actx_scope().unwrap();
         App::new()

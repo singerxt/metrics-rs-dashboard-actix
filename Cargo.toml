@@ -12,4 +12,5 @@ log-once = "0.4.1"
 metrics = "0.24.2"
 metrics-prometheus = "0.10.0"
 metrics-util = "0.19.1"
+prometheus = "0.14.0"
 tokio = { version = "1.45.0", features = ["full"] }
