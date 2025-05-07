@@ -18,11 +18,14 @@ async fn get_prometheus_metrics() -> impl Responder {
     debug!("Gathering prometheus metrics...");
     let prometheus_recorder = get_prometheus_recorder();
     let metrics = match prometheus::TextEncoder::new()
-        .encode_to_string(&prometheus_recorder.registry().gather()) {
-            Ok(m) => m,
-            Err(e) => return HttpResponse::InternalServerError().body(format!("Failed to encode metrics: {}", e)),
-        };
-    debug!("Prometheus metrics: {}", metrics);
+        .encode_to_string(&prometheus_recorder.registry().gather())
+    {
+        Ok(m) => m,
+        Err(e) => {
+            return HttpResponse::InternalServerError()
+                .body(format!("Failed to encode metrics: {}", e));
+        }
+    };
     HttpResponse::Ok().body(metrics)
 }
 
