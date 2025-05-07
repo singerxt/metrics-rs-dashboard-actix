@@ -6,11 +6,17 @@ edition = "2024"
 [dependencies]
 actix-web = "4.10.2"
 anyhow = "1.0.98"
+chrono = { version = "0.4", features = ["serde"] }
 env_logger = "0.11.8"
 log = "0.4.27"
 log-once = "0.4.1"
 metrics = "0.24.2"
 metrics-prometheus = "0.10.0"
 metrics-util = "0.19.1"
+mime_guess = "2.0.5"
 prometheus = "0.14.0"
+prometheus-parse = "0.2.5"
+rust-embed = "8.7.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 tokio = { version = "1.45.0", features = ["full"] }

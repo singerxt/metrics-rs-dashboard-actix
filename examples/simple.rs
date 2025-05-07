@@ -2,7 +2,7 @@ use std::{sync::Arc, thread};
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
-use metrics::{counter, describe_counter};
+use metrics::{counter, describe_counter, describe_histogram};
 use metrics_actix_dashboard::create_metrics_actx_scope;
 
 async fn hello() -> impl Responder {
@@ -29,6 +29,16 @@ async fn main() -> std::io::Result<()> {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             counter!("async_counter").increment(1);
+        }
+    });
+
+    // histogram
+    tokio::spawn(async {
+        describe_histogram!("async_histogram", "Async histogram");
+
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            metrics::histogram!("async_histogram").record(1.0);
         }
     });
 
