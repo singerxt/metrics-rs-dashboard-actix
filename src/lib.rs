@@ -54,14 +54,14 @@ fn configure_metrics_recorders_once() -> Result<()> {
 
     *is_ok = true;
 
-    let prometeus_recorder = get_prometheus_recorder();
+    let prometheus_recorder = get_prometheus_recorder();
 
     let fanout = FanoutBuilder::default()
-        .add_recorder(prometeus_recorder)
+        .add_recorder(prometheus_recorder)
         .build();
 
     metrics::set_global_recorder(fanout)
-        .expect("Unable to register a recorder.Did you call this function multiple times?");
+        .map_err(|e| anyhow::anyhow!("Unable to register a recorder: {}. Did you call this function multiple times?", e))?;
 
     Ok(())
 }
