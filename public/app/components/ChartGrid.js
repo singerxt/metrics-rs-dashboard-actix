@@ -1,11 +1,18 @@
-import { html, useEffect, useRef, useState } from "https://esm.sh/htm/preact/standalone";
+import {
+  html,
+  useEffect,
+  useRef,
+  useState
+} from "https://esm.sh/htm/preact/standalone";
 import MetricBuffer from "../common/MetricBuffer.js";
 import PrometheusImport from "../common/PrometheusImport.js";
 
 const metricBuffer = new MetricBuffer(10);
 const prometheusImporter = new PrometheusImport('./prometheus');
 
-function CounterChart({ metricSample }) {
+function CounterChart({
+  metricSample
+}) {
   const chartRef = useRef(null);
 
   useEffect(() => {
@@ -93,16 +100,20 @@ function CounterChart({ metricSample }) {
 
 const renderChart = (sample) => {
   switch (sample.type) {
-			case "COUNTER": {
-			  return html`<${CounterChart} metricSample=${sample} />`;
-			}
-			default: {
-        return html`<h1>Unsupported metric type: ${sample.type}</h1>`;
-      }
-		}
+    case "COUNTER": {
+      return html`<${CounterChart} metricSample=${sample} />`;
+    }
+    default: {
+      return html`<h1>Unsupported metric type: ${sample.type}</h1>`;
+    }
+  }
 };
 
-function ChartGrid({ searchValue, refreshRate, bufferSize }) {
+function ChartGrid({
+  searchValue,
+  refreshRate,
+  bufferSize
+}) {
   const [metrics, setMetrics] = useState([]);
 
   useEffect(() => {

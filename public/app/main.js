@@ -1,10 +1,10 @@
 import {
-	html,
-	render,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
+  html,
+  render,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
 } from "https://esm.sh/htm/preact/standalone";
 import apexDefaultTheme from "./common/apexDefaultTheme.js";
 import debounce from "./common/debounce.js";
@@ -20,69 +20,69 @@ const METRIC_BUFFER_SIZE_DEFAULT = 10;
 const MIN_REFRESH_RATE = 250;
 
 function App(props) {
-	const [refreshRate, setRefreshRate] = useState(1000);
-	const [searchValue, setSearchValue] = useState("");
-	const [bufferSize, setBufferSize] = useState(METRIC_BUFFER_SIZE_DEFAULT);
-	const [debouncedRefreshRate, setDebouncedRefreshRate] = useState(refreshRate);
-	const [debouncedSearchValue, setDebouncedSearchValue] = useState(searchValue);
-	const [debouncedBufferSize, setDebouncedBufferSize] = useState(bufferSize);
+  const [refreshRate, setRefreshRate] = useState(1000);
+  const [searchValue, setSearchValue] = useState("");
+  const [bufferSize, setBufferSize] = useState(METRIC_BUFFER_SIZE_DEFAULT);
+  const [debouncedRefreshRate, setDebouncedRefreshRate] = useState(refreshRate);
+  const [debouncedSearchValue, setDebouncedSearchValue] = useState(searchValue);
+  const [debouncedBufferSize, setDebouncedBufferSize] = useState(bufferSize);
 
-	// Use useMemo for expensive calculations that depend on specific inputs
-	const debouncedSetRefreshRate = useMemo(
-		() =>
-			debounce((value) => {
-				setDebouncedRefreshRate(value);
-			}, REFRESH_DEBOUNCE_MS),
-		[], // Empty dependency array means this is created only once
-	);
+  // Use useMemo for expensive calculations that depend on specific inputs
+  const debouncedSetRefreshRate = useMemo(
+    () =>
+    debounce((value) => {
+      setDebouncedRefreshRate(value);
+    }, REFRESH_DEBOUNCE_MS),
+    [], // Empty dependency array means this is created only once
+  );
 
-	const debouncedSetSearchValue = useMemo(
-		() =>
-			debounce((value) => {
-				setDebouncedSearchValue(value);
-			}, SEARCH_DEBOUNCE_MS),
-		[], // Empty dependency array means this is created only once
-	);
+  const debouncedSetSearchValue = useMemo(
+    () =>
+    debounce((value) => {
+      setDebouncedSearchValue(value);
+    }, SEARCH_DEBOUNCE_MS),
+    [], // Empty dependency array means this is created only once
+  );
 
-	const debouncedSetBufferSize = useMemo(
-		() =>
-			debounce((value) => {
-				setDebouncedBufferSize(value);
-			}, BUFFER_SIZE_DEBOUNCE_MS),
-		[], // Empty dependency array means this is created only once
-	);
+  const debouncedSetBufferSize = useMemo(
+    () =>
+    debounce((value) => {
+      setDebouncedBufferSize(value);
+    }, BUFFER_SIZE_DEBOUNCE_MS),
+    [], // Empty dependency array means this is created only once
+  );
 
-	// Use a more efficient event handler
-	const handleRefreshRateChange = useCallback((e) => {
-		const value = Math.max(
-			MIN_REFRESH_RATE,
-			Number.parseInt(e.target.value) || MIN_REFRESH_RATE,
-		);
-		setRefreshRate(value);
-	}, []);
+  // Use a more efficient event handler
+  const handleRefreshRateChange = useCallback((e) => {
+    const value = Math.max(
+      MIN_REFRESH_RATE,
+      Number.parseInt(e.target.value) || MIN_REFRESH_RATE,
+    );
+    setRefreshRate(value);
+  }, []);
 
-	const handleSearchChange = useCallback((e) => {
-		setSearchValue(e.target.value);
-	}, []);
+  const handleSearchChange = useCallback((e) => {
+    setSearchValue(e.target.value);
+  }, []);
 
-	const handleBufferSizeChange = useCallback((e) => {
-		const value = Math.max(1, Number.parseInt(e.target.value) || 1);
-		setBufferSize(value);
-	}, []);
+  const handleBufferSizeChange = useCallback((e) => {
+    const value = Math.max(1, Number.parseInt(e.target.value) || 1);
+    setBufferSize(value);
+  }, []);
 
-	useEffect(() => {
-		debouncedSetRefreshRate(refreshRate);
-	}, [refreshRate, debouncedSetRefreshRate]);
+  useEffect(() => {
+    debouncedSetRefreshRate(refreshRate);
+  }, [refreshRate, debouncedSetRefreshRate]);
 
-	useEffect(() => {
-		debouncedSetSearchValue(searchValue);
-	}, [searchValue, debouncedSetSearchValue]);
+  useEffect(() => {
+    debouncedSetSearchValue(searchValue);
+  }, [searchValue, debouncedSetSearchValue]);
 
-	useEffect(() => {
-		debouncedSetBufferSize(bufferSize);
-	}, [bufferSize, debouncedSetBufferSize]);
+  useEffect(() => {
+    debouncedSetBufferSize(bufferSize);
+  }, [bufferSize, debouncedSetBufferSize]);
 
-	return html`
+  return html`
     <div class="">
       <h1>Metrics</h1>
       <section class="grid">
