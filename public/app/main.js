@@ -15,18 +15,13 @@ import ChartGrid from "./components/ChartGrid.js";
 const REFRESH_DEBOUNCE_MS = 500;
 const SEARCH_DEBOUNCE_MS = 300;
 const BUFFER_SIZE_DEBOUNCE_MS = 300;
-const METRIC_BUFFER_SIZE = 10;
-const METRIC_ENDPOINT = "./metrics";
+const METRIC_BUFFER_SIZE_DEFAULT = 10;
 const MIN_REFRESH_RATE = 250;
-
-// Create singleton instances outside of the component to avoid recreating on each render
-const metricBuffer = new MetricBuffer(METRIC_BUFFER_SIZE);
-const prometheusImporter = new PrometheusImport(METRIC_ENDPOINT);
 
 function App(props) {
   const [refreshRate, setRefreshRate] = useState(1000);
   const [searchValue, setSearchValue] = useState("");
-  const [bufferSize, setBufferSize] = useState(METRIC_BUFFER_SIZE);
+  const [bufferSize, setBufferSize] = useState(METRIC_BUFFER_SIZE_DEFAULT);
   const [debouncedRefreshRate, setDebouncedRefreshRate] = useState(refreshRate);
   const [debouncedSearchValue, setDebouncedSearchValue] = useState(searchValue);
   const [debouncedBufferSize, setDebouncedBufferSize] = useState(bufferSize);
@@ -111,7 +106,7 @@ function App(props) {
           />
         </label>
         <label>
-          Buffer size
+          Buffer size (aka history length)
           <input
             type="number"
             name="buffer-size"
