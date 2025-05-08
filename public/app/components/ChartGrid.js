@@ -8,7 +8,6 @@ const prometheusImporter = new PrometheusImport('./prometheus');
 function CounterChart({ metricSample }) {
   const chartRef = useRef(null);
 
-  console.log("metricsSample", metricSample);
   useEffect(() => {
     const data = metricSample.metrics.map((metric) => {
       return {
@@ -17,14 +16,42 @@ function CounterChart({ metricSample }) {
       };
     });
 
-    console.log(data);
     const options = {
+      title: {
+        text: metricSample.name,
+        align: 'left',
+        style: {
+          fontSize: '24px',
+          color: '#fff'
+        }
+      },
+      subtitle: {
+        text: `${metricSample.help} | current: ${data[data.length - 1].y}`,
+        align: 'left',
+        style: {
+          fontSize: '16px',
+          color: '#fff'
+        }
+      },
       chart: {
         type: 'line',
         height: 350,
         animations: {
-          enabled: true
-        }
+          enabled: true,
+          speed: 100,
+        },
+        toolbar: {
+          tools: {
+            download: true,
+            selection: false,
+            zoom: false,
+            zoomin: false,
+            zoomout: false,
+            pan: false,
+            reset: false,
+            customIcons: []
+          },
+        },
       },
       series: [{
         name: 'Counter Increase',
@@ -60,7 +87,7 @@ function CounterChart({ metricSample }) {
     return () => {
       chart.destroy();
     };
-  }, []);
+  }, [JSON.stringify(metricSample)]);
 
   return html`<div ref=${chartRef}></div>`;
 }
@@ -97,8 +124,12 @@ function ChartGrid({ searchValue, refreshRate, bufferSize }) {
     return () => clearInterval(interval);
   }, [refreshRate, searchValue]);
 
+  useEffect(() => {
+    metricBuffer.setBufferSize(bufferSize);
+  }, [bufferSize]);
+
   return html`
-    <div class="container">
+    <div class="container responsive-grid">
       ${metrics.map((sample) => renderChart(sample))}
     </div>
   `;

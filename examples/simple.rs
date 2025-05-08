@@ -20,7 +20,7 @@ async fn main() -> std::io::Result<()> {
 
         loop {
             thread::sleep(std::time::Duration::from_secs(1));
-            let random_value = rand::rng().random_range(0..50);
+            let random_value = rand::rng().random_range(0..5);
             counter!("counter").increment(random_value);
         }
     });
@@ -30,7 +30,7 @@ async fn main() -> std::io::Result<()> {
 
         loop {
             thread::sleep(std::time::Duration::from_secs(1));
-            let random_value = rand::rng().random_range(0..50);
+            let random_value = rand::rng().random_range(0..5);
             counter!("async_counter").increment(random_value);
         }
     });

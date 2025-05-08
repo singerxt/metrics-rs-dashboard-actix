@@ -1,3 +1,16 @@
 body {
     background: #121212;
+    padding: 20px;
+}
+
+.responsive-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Mobile default: 1 column */
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .responsive-grid {
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  }
 }
