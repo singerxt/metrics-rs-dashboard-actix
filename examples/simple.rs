@@ -4,7 +4,6 @@ use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
 use metrics::{counter, describe_counter, describe_histogram};
 use metrics_actix_dashboard::create_metrics_actx_scope;
-use rand::Rng;
 
 async fn hello() -> impl Responder {
     HttpResponse::Ok().body("Hello from Actix-Web!")
@@ -15,36 +14,39 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     info!("Starting Actix-Web server with metrics at /metrics");
 
-    thread::spawn(|| {
-        describe_counter!("counter", "thread counter");
+    tokio::spawn(async {
+        println!("Starting async thread");
+        describe_counter!("async_counter", "Incrementing by random number");
 
         loop {
-            thread::sleep(std::time::Duration::from_secs(1));
-            let random_value = rand::rng().random_range(0..5);
-            counter!("counter").increment(random_value);
+            let random_number = rand::random_range(1..10);
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            counter!("async_counter").increment(random_number);
         }
     });
 
-    tokio::spawn(async {
-        describe_counter!("async_counter", "Async counter");
+    thread::spawn(|| {
+        describe_counter!("counter", "Incrementing by random number");
 
         loop {
+            let random_number = rand::random_range(1..10);
             thread::sleep(std::time::Duration::from_secs(1));
-            let random_value = rand::rng().random_range(0..5);
-            counter!("async_counter").increment(random_value);
+            counter!("counter").increment(random_number);
         }
     });
 
     // histogram
     tokio::spawn(async {
-        describe_histogram!("async_histogram", "Async histogram");
+        println!("Starting async histogram thread");
+        describe_histogram!("async_histogram", "tokio async histogram");
 
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let random_value = rand::rng().random_range(0.0..10.0);
-            metrics::histogram!("async_histogram").record(random_value);
+            metrics::histogram!("async_histogram").record(1.0);
         }
     });
+
+
 
     HttpServer::new(|| {
         let metrics_actix_dashboard = create_metrics_actx_scope().unwrap();

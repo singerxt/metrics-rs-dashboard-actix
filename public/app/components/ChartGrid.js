@@ -37,8 +37,7 @@ function CounterChart({ metricSample }) {
         type: 'line',
         height: 350,
         animations: {
-          enabled: true,
-          speed: 100,
+          enabled: false,
         },
         toolbar: {
           tools: {
@@ -54,7 +53,7 @@ function CounterChart({ metricSample }) {
         },
       },
       series: [{
-        name: 'Counter Increase',
+        name: 'Counter Value',
         data: data
       }],
       xaxis: {
@@ -65,18 +64,18 @@ function CounterChart({ metricSample }) {
       },
       yaxis: {
         title: {
-          text: 'Increase'
+          text: 'Value',
         }
       },
       tooltip: {
         x: {
-          format: 'dd MMM yyyy HH:mm'
+          format: 'HH:mm:ss:ms'
         }
       },
       theme: {
         enabled: true,
         color: '#255aee',
-        shadeTo: 'light',
+        shadeTo: 'dark',
         shadeIntensity: 0.65
       }
     };
@@ -129,7 +128,7 @@ function ChartGrid({ searchValue, refreshRate, bufferSize }) {
   }, [bufferSize]);
 
   return html`
-    <div class="container responsive-grid">
+    <div class="responsive-grid">
       ${metrics.map((sample) => renderChart(sample))}
     </div>
   `;
