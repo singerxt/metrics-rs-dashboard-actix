@@ -1078,6 +1078,7 @@ dependencies = [
  "mime_guess",
  "prometheus",
  "prometheus-parse",
+ "rand",
  "rust-embed",
  "serde",
  "serde_json",

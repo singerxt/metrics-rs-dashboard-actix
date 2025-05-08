@@ -1,14 +1,31 @@
+/**
+ * Class for buffering and managing metrics data.
+ * Stores metrics in a Map with limited buffer size per metric.
+ */
 class MetricBuffer {
+  /** @private Map to store metric samples */
   #buffer = new Map();
-  // Maximum number of entries per metric
+  /** @private Maximum number of entries per metric */
   #bufferSize = 10;
 
+  /**
+   * Creates a new MetricBuffer instance
+   * @param {number} bufferSize - Optional custom buffer size for metrics
+   */
   constructor(bufferSize) {
     if (bufferSize) {
       this.#bufferSize = bufferSize;
     }
   }
 
+  /**
+   * Adds new metrics to the buffer, maintaining the buffer size limit
+   * @param {Array} metrics - Array of metric samples to add
+   * @param {string} metrics[].name - Name of the metric
+   * @param {string} metrics[].type - Type of the metric
+   * @param {string} metrics[].help - Help text for the metric
+   * @param {Array} metrics[].metrics - Array of metric data points
+   */
   addMetrics(metrics) {
     for (const sample of metrics) {
       const currentSample = this.#buffer.get(sample.name);
@@ -27,6 +44,10 @@ class MetricBuffer {
     }
   }
 
+  /**
+   * Logs all stored metrics to the console
+   * Displays name, type, help text, and all stored metric data points
+   */
   logMetrics() {
     for (const [name, sample] of this.#buffer.entries()) {
       console.log(`Metric: ${name}`);

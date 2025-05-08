@@ -1,9 +1,10 @@
-use std::{sync::Arc, thread};
+use std::thread;
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
 use metrics::{counter, describe_counter, describe_histogram};
 use metrics_actix_dashboard::create_metrics_actx_scope;
+use rand::Rng;
 
 async fn hello() -> impl Responder {
     HttpResponse::Ok().body("Hello from Actix-Web!")
@@ -38,7 +39,8 @@ async fn main() -> std::io::Result<()> {
 
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            metrics::histogram!("async_histogram").record(1.0);
+            let random_value = rand::rng().random_range(0.0..10.0);
+            metrics::histogram!("async_histogram").record(random_value);
         }
     });
 

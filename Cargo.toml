@@ -16,6 +16,7 @@ metrics-util = "0.19.1"
 mime_guess = "2.0.5"
 prometheus = "0.14.0"
 prometheus-parse = "0.2.5"
+rand = "0.9.1"
 rust-embed = "8.7.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
