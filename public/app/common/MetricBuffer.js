@@ -45,6 +45,19 @@ class MetricBuffer {
   }
 
   /**
+   * Sets a new buffer size for the metric buffer
+   * @param {number} bufferSize - The new buffer size to set
+   * @throws {Warning} - If buffer size is not greater than 10
+   */
+  setBufferSize(bufferSize) {
+    if (bufferSize > 10) {
+      this.#bufferSize = bufferSize;
+    } else {
+      console.warn("Buffer size must be greater than 10");
+    }
+  }
+
+  /**
    * Logs all stored metrics to the console
    * Displays name, type, help text, and all stored metric data points
    */

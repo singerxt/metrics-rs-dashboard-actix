@@ -4,7 +4,6 @@
 //! It exposes metrics via HTTP endpoints and includes a dashboard for visualization.
 
 use std::sync::{Mutex, OnceLock};
-
 use actix_web::{HttpResponse, Responder, Scope, web};
 use anyhow::{Context, Result};
 use log::debug;
