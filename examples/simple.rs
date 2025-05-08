@@ -16,11 +16,12 @@ async fn main() -> std::io::Result<()> {
     info!("Starting Actix-Web server with metrics at /metrics");
 
     thread::spawn(|| {
-        describe_counter!("real_time", "Real time counter");
+        describe_counter!("counter", "thread counter");
 
         loop {
             thread::sleep(std::time::Duration::from_secs(1));
-            counter!("real_time").increment(1);
+            let random_value = rand::rng().random_range(0..50);
+            counter!("counter").increment(random_value);
         }
     });
 
@@ -28,8 +29,9 @@ async fn main() -> std::io::Result<()> {
         describe_counter!("async_counter", "Async counter");
 
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            counter!("async_counter").increment(1);
+            thread::sleep(std::time::Duration::from_secs(1));
+            let random_value = rand::rng().random_range(0..50);
+            counter!("async_counter").increment(random_value);
         }
     });
 

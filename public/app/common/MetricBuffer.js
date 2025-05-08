@@ -28,6 +28,14 @@ class MetricBuffer {
    */
   addMetrics(metrics) {
     for (const sample of metrics) {
+      if (sample) {
+        for (const metric of sample.metrics) {
+          if (metric) {
+            metric.timestamp = Date.now();
+          }
+        }
+      }
+
       const currentSample = this.#buffer.get(sample.name);
       if (!currentSample) {
         this.#buffer.set(sample.name, sample);
@@ -71,6 +79,10 @@ class MetricBuffer {
         console.log(`    ${JSON.stringify(metric)}`);
       }
     }
+  }
+
+  getMetrics() {
+    return Array.from(this.#buffer.values());
   }
 }
 
