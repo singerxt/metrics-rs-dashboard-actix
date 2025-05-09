@@ -2,7 +2,7 @@ use std::thread;
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
-use metrics::{counter, describe_counter, describe_histogram};
+use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, Unit};
 use metrics_actix_dashboard::create_metrics_actx_scope;
 
 async fn hello() -> impl Responder {
@@ -19,7 +19,7 @@ async fn main() -> std::io::Result<()> {
         describe_counter!("async_counter", "Incrementing by random number");
 
         loop {
-            let random_number = rand::random_range(1..10);
+            let random_number = rand::random_range(0..10);
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             counter!("async_counter").increment(random_number);
         }
@@ -37,12 +37,44 @@ async fn main() -> std::io::Result<()> {
 
     // histogram
     tokio::spawn(async {
-        println!("Starting async histogram thread");
-        describe_histogram!("async_histogram", "tokio async histogram");
+        println!("Starting simulated request latency thread");
+        describe_histogram!("request_latency", Unit::BitsPerSecond, "Simulated latency of HTTP requests in milliseconds");
 
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            metrics::histogram!("async_histogram").record(1.0);
+            // Simulate variable latency between 10-500ms
+            let latency = rand::random::<f64>() * 490.0 + 10.0;
+
+            // Record the simulated latency
+            metrics::histogram!("request_latency").record(latency);
+
+            // Occasionally simulate slower requests (simulate spikes)
+            if rand::random::<f64>() < 0.1 {
+                // 10% chance of a slow request (500-2000ms)
+                let spike_latency = rand::random::<f64>() * 1500.0 + 500.0;
+                metrics::histogram!("request_latency").record(spike_latency);
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    });
+
+    tokio::spawn(async {
+        println!("Starting simulated request latency thread");
+        describe_gauge!("request_latency_gauge", "Simulated latency of HTTP requests in milliseconds");
+
+        loop {
+            // Simulate variable latency between 10-500ms
+            let latency = rand::random::<f64>() * 490.0 + 10.0;
+
+            gauge!("request_latency_gauge").set(latency);
+            // Occasionally simulate slower requests (simulate spikes)
+            if rand::random::<f64>() < 0.1 {
+                // 10% chance of a slow request (500-2000ms)
+                let spike_latency = rand::random::<f64>() * 1500.0 + 500.0;
+                gauge!("request_latency_gauge").set(spike_latency);
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     });
 

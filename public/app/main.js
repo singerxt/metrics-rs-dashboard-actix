@@ -17,7 +17,7 @@ const REFRESH_DEBOUNCE_MS = 500;
 const SEARCH_DEBOUNCE_MS = 300;
 const BUFFER_SIZE_DEBOUNCE_MS = 300;
 const METRIC_BUFFER_SIZE_DEFAULT = 10;
-const MIN_REFRESH_RATE = 250;
+const MIN_REFRESH_RATE = 100;
 
 function App(props) {
   const [refreshRate, setRefreshRate] = useState(1000);
@@ -30,25 +30,25 @@ function App(props) {
   // Use useMemo for expensive calculations that depend on specific inputs
   const debouncedSetRefreshRate = useMemo(
     () =>
-    debounce((value) => {
-      setDebouncedRefreshRate(value);
-    }, REFRESH_DEBOUNCE_MS),
+      debounce((value) => {
+        setDebouncedRefreshRate(value);
+      }, REFRESH_DEBOUNCE_MS),
     [], // Empty dependency array means this is created only once
   );
 
   const debouncedSetSearchValue = useMemo(
     () =>
-    debounce((value) => {
-      setDebouncedSearchValue(value);
-    }, SEARCH_DEBOUNCE_MS),
+      debounce((value) => {
+        setDebouncedSearchValue(value);
+      }, SEARCH_DEBOUNCE_MS),
     [], // Empty dependency array means this is created only once
   );
 
   const debouncedSetBufferSize = useMemo(
     () =>
-    debounce((value) => {
-      setDebouncedBufferSize(value);
-    }, BUFFER_SIZE_DEBOUNCE_MS),
+      debounce((value) => {
+        setDebouncedBufferSize(value);
+      }, BUFFER_SIZE_DEBOUNCE_MS),
     [], // Empty dependency array means this is created only once
   );
 
@@ -98,11 +98,11 @@ function App(props) {
           />
         </label>
         <label>
-          Refresh rate (ms) [min = 250ms]
+          Refresh rate (ms) [min = 100ms]
           <input
             type="number"
             name="refresh-rate"
-            placeholder="Refresh rate (ms) [min = 250]"
+            placeholder="Refresh rate (ms) [min = 100]"
             aria-label="Number"
             value=${refreshRate}
             onInput=${handleRefreshRateChange}
