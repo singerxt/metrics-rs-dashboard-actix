@@ -8,7 +8,7 @@ use actix_web::{HttpResponse, Responder, Scope, web};
 use anyhow::{Context, Result};
 use log::debug;
 use log_once::debug_once;
-use metrics_prometheus::failure::strategy::{self, NoOp};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use metrics_util::layers::FanoutBuilder;
 use mime_guess::from_path;
 use rust_embed::Embed;
@@ -16,7 +16,7 @@ use rust_embed::Embed;
 /// Global flag to track if metrics recorders have been configured
 static IS_CONFIGURED: OnceLock<Mutex<bool>> = OnceLock::new();
 /// Global Prometheus recorder instance
-static PROMETHEUS_RECORDER: OnceLock<metrics_prometheus::Recorder<NoOp>> = OnceLock::new();
+static PROMETHEUS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 
 /// Embedded assets for the metrics dashboard
 #[derive(Embed)]
@@ -73,31 +73,15 @@ async fn get_dashboard_assets(path: web::Path<String>) -> impl Responder {
 #[actix_web::get("/prometheus")]
 async fn get_prometheus_metrics() -> impl Responder {
     debug!("Gathering prometheus metrics...");
-    let prometheus_recorder = get_prometheus_recorder();
-    let metrics = match prometheus::TextEncoder::new()
-        .encode_to_string(&prometheus_recorder.registry().gather())
-    {
-        Ok(m) => m,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to encode metrics: {}", e));
-        }
-    };
-    HttpResponse::Ok().body(metrics)
-}
+    let prometheus_handle = PROMETHEUS_HANDLE.get();
 
-/// Gets or initializes the Prometheus recorder
-///
-/// # Returns
-///
-/// A cloned instance of the global Prometheus recorder
-fn get_prometheus_recorder() -> metrics_prometheus::Recorder<NoOp> {
-    let prometheus_recorder = PROMETHEUS_RECORDER.get_or_init(|| {
-        metrics_prometheus::Recorder::builder()
-            .with_failure_strategy(strategy::NoOp)
-            .build()
-    });
-    prometheus_recorder.clone()
+    if let Some(handle) = prometheus_handle {
+        let metrics = handle.render();
+        return HttpResponse::Ok()
+            .body(metrics);
+    }
+
+    HttpResponse::Ok().body(String::from(""))
 }
 
 /// Configures metrics recorders if they haven't been configured yet
@@ -124,7 +108,11 @@ fn configure_metrics_recorders_once() -> Result<()> {
 
     *is_ok = true;
 
-    let prometheus_recorder = get_prometheus_recorder();
+    let prometheus_recorder = PrometheusBuilder::new().build_recorder();
+
+    PROMETHEUS_HANDLE
+        .set(prometheus_recorder.handle())
+        .map_err(|e| anyhow::anyhow!("Unable to set Prometheus handle: {}", e.render()))?;
 
     let fanout = FanoutBuilder::default()
         .add_recorder(prometheus_recorder)
