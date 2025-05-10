@@ -1,5 +1,6 @@
 # metrics-actix-dashboard
 
+[![Screenshot](./doc/screenshort.png)]
 A Rust library for integrating metrics and a visualization dashboard into Actix web applications. This crate provides a simple way to set up Prometheus metrics and expose them through an API endpoint, as well as a web dashboard for real-time metrics visualization.
 
 ## Features
@@ -49,7 +50,7 @@ async fn main() -> std::io::Result<()> {
     // Create your Actix web app with the metrics scope
     HttpServer::new(|| {
         let metrics_scope = create_metrics_actx_scope(&dashboard_input).unwrap();
-        
+
         App::new()
             .service(metrics_scope)
             // ... your other routes
