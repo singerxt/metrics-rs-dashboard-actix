@@ -1,12 +1,12 @@
 # metrics-rs-dashboard-actix
 
 
-A Rust library for integrating metrics and a visualization dashboard into Actix web applications. This crate provides a simple way to set up Prometheus metrics and expose them through an API endpoint, as well as a web dashboard for real-time metrics visualization.
+A Rust library for integrating metrics and a visualization dashboard. This crate provides a simple way to set up Prometheus metrics and expose them through an API endpoint, as well as a web dashboard for real-time metrics visualization. Actix is used only for exposing the endpoints and dashboard - you can use this library even if your main application isn't built with Actix.
 ![Screenshot](https://github.com/singerxt/metrics-rs-dashboard-actix/blob/main/doc/screenshot.png?raw=true)
 
 ## Features
 
-- Easy integration with Actix Web applications
+- Easy integration with any Rust application (Actix currently required for dashboard exposure only)
 - Real-time metrics visualization dashboard
 - Prometheus metrics endpoint
 - Support for custom histogram buckets
@@ -49,6 +49,7 @@ async fn main() -> std::io::Result<()> {
     };
 
     // Create your Actix web app with the metrics scope
+    // Note: Actix is currently required only for exposing the dashboard and metrics endpoints
     HttpServer::new(|| {
         let metrics_scope = create_metrics_actx_scope(&dashboard_input).unwrap();
 
@@ -68,6 +69,14 @@ Once your application is running, you can:
 
 1. Access the metrics dashboard at: `http://localhost:8080/metrics/dashboard`
 2. View Prometheus metrics at: `http://localhost:8080/metrics/prometheus`
+
+Note that while you can use the metrics collection functionality in any Rust application, Actix Web is currently required to expose the dashboard and metrics endpoints.
+
+## Actix Web Integration
+
+This library uses Actix Web solely for exposing the dashboard and metrics endpoints. You can use the metrics collection functionality in any Rust application, regardless of whether your main application uses Actix or not. However, at this moment, Actix Web is required to expose the dashboard and metrics API endpoints. 
+
+Future versions may provide additional integration options for other web frameworks.
 
 ## Defining Metrics
 
