@@ -1,164 +1,82 @@
-// metricSample example
-//
-// {
-//     "name": "request_latency",
-//     "help": "Simulated latency of HTTP requests in milliseconds",
-//     "type": "HISTOGRAM",
-//     "metrics": [
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "66",
-//                 "200": "127",
-//                 "500": "294",
-//                 "1000": "309",
-//                 "2000": "325",
-//                 "+Inf": "325"
-//             },
-//             "count": "325",
-//             "sum": "107604.61912404736",
-//             "timestamp": 1746874219615
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "67",
-//                 "200": "128",
-//                 "500": "296",
-//                 "1000": "311",
-//                 "2000": "327",
-//                 "+Inf": "327"
-//             },
-//             "count": "327",
-//             "sum": "108084.53374363872",
-//             "timestamp": 1746874220615
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "67",
-//                 "200": "129",
-//                 "500": "298",
-//                 "1000": "313",
-//                 "2000": "330",
-//                 "+Inf": "330"
-//             },
-//             "count": "330",
-//             "sum": "110589.23051083839",
-//             "timestamp": 1746874221615
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "67",
-//                 "200": "129",
-//                 "500": "300",
-//                 "1000": "315",
-//                 "2000": "332",
-//                 "+Inf": "332"
-//             },
-//             "count": "332",
-//             "sum": "111262.71755411358",
-//             "timestamp": 1746874222618
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "69",
-//                 "200": "131",
-//                 "500": "302",
-//                 "1000": "317",
-//                 "2000": "335",
-//                 "+Inf": "335"
-//             },
-//             "count": "335",
-//             "sum": "113238.70431081149",
-//             "timestamp": 1746874223617
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "69",
-//                 "200": "131",
-//                 "500": "304",
-//                 "1000": "319",
-//                 "2000": "337",
-//                 "+Inf": "337"
-//             },
-//             "count": "337",
-//             "sum": "113925.1767661718",
-//             "timestamp": 1746874224616
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "69",
-//                 "200": "131",
-//                 "500": "306",
-//                 "1000": "322",
-//                 "2000": "340",
-//                 "+Inf": "340"
-//             },
-//             "count": "340",
-//             "sum": "115609.34549137753",
-//             "timestamp": 1746874225617
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "69",
-//                 "200": "132",
-//                 "500": "308",
-//                 "1000": "324",
-//                 "2000": "342",
-//                 "+Inf": "342"
-//             },
-//             "count": "342",
-//             "sum": "116148.97975793485",
-//             "timestamp": 1746874226618
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "69",
-//                 "200": "133",
-//                 "500": "310",
-//                 "1000": "326",
-//                 "2000": "344",
-//                 "+Inf": "344"
-//             },
-//             "count": "344",
-//             "sum": "116580.54345996855",
-//             "timestamp": 1746874227616
-//         },
-//         {
-//             "buckets": {
-//                 "10": "0",
-//                 "50": "28",
-//                 "100": "69",
-//                 "200": "134",
-//                 "500": "312",
-//                 "1000": "328",
-//                 "2000": "346",
-//                 "+Inf": "346"
-//             },
-//             "count": "346",
-//             "sum": "117019.65690621859",
-//             "timestamp": 1746874228615
-//         }
-//     ]
-// }
+import { html, useEffect, useRef } from "https://esm.sh/htm/preact/standalone";
+
 function HistogramChart({ metricSample }) {
-  console.log("HistogramChart", metricSample);
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    const latestSample = metricSample.metrics[metricSample.metrics.length - 1];
+    if (!latestSample || !latestSample.buckets) return;
+
+    const buckets = latestSample.buckets;
+    const bucketKeys = Object.keys(buckets)
+      .filter((key) => key !== "+Inf")
+      .map(Number)
+      .sort((a, b) => a - b);
+    const bucketCounts = bucketKeys.map((key) =>
+      Number.parseInt(buckets[key], 10),
+    );
+
+    const data = bucketKeys.map((key, index) => {
+      const lowerBound = index === 0 ? 0 : bucketKeys[index - 1];
+      return {
+        x: `${lowerBound}–${key}`,
+        y: bucketCounts[index] - (bucketCounts[index - 1] || 0),
+      };
+    });
+
+    const options = {
+      chart: {
+        type: "bar",
+        height: 350,
+        toolbar: {
+          show: true,
+        },
+        animations: {
+          enabled: false,
+        },
+      },
+      plotOptions: {
+        bar: {
+          columnWidth: "100%",
+        },
+      },
+      dataLabels: {
+        enabled: false,
+      },
+      series: [
+        {
+          name: "Frequency",
+          data: data,
+        },
+      ],
+      xaxis: {
+        title: {
+          text: "Value Range",
+        },
+      },
+      yaxis: {
+        title: {
+          text: "Count",
+        },
+      },
+      tooltip: {
+        x: {
+          formatter: (val) => {
+            return `Range: ${val}`;
+          },
+        },
+      },
+    };
+
+    const chart = new ApexCharts(chartRef.current, options);
+    chart.render();
+
+    return () => {
+      chart.destroy();
+    };
+  }, [JSON.stringify(metricSample)]);
+
+  return html`<div ref=${chartRef}></div>`;
 }
 
 export default HistogramChart;

@@ -22,7 +22,6 @@ const renderChart = (sample) => {
       return html`<${GaugeChart} metricSample=${sample} />`;
     }
     case "HISTOGRAM": {
-      console.log("histogram", sample);
       return html`<${HistogramChart} metricSample=${sample} />`;
     }
     default: {
