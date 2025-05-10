@@ -1,5 +1,5 @@
 [package]
-name = "metrics-actix-dashboard"
+name = "metrics-rs-dashboard-actix"
 version = "0.1.0"
 edition = "2024"
 

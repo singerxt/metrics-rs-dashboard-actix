@@ -3,7 +3,7 @@ use std::thread;
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
 use metrics::{Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge};
-use metrics_actix_dashboard::{DashboardInput, create_metrics_actx_scope};
+use metrics_rs_dashboard_actix::{DashboardInput, create_metrics_actx_scope};
 use metrics_exporter_prometheus::Matcher;
 
 async fn hello() -> impl Responder {
