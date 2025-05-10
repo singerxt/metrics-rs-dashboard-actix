@@ -1,6 +1,6 @@
 # metrics-actix-dashboard
 
-[![Screenshot](https://github.com/singerxt/metrics-rs-dashboard-actix/blob/main/doc/screenshot.png?raw=true)]
+![Screenshot](https://github.com/singerxt/metrics-rs-dashboard-actix/blob/main/doc/screenshot.png?raw=true)
 A Rust library for integrating metrics and a visualization dashboard into Actix web applications. This crate provides a simple way to set up Prometheus metrics and expose them through an API endpoint, as well as a web dashboard for real-time metrics visualization.
 
 ## Features
