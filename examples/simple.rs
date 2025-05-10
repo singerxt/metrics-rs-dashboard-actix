@@ -2,8 +2,9 @@ use std::thread;
 
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
-use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, Unit};
-use metrics_actix_dashboard::create_metrics_actx_scope;
+use metrics::{Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge};
+use metrics_actix_dashboard::{DashboardInput, create_metrics_actx_scope};
+use metrics_exporter_prometheus::Matcher;
 
 async fn hello() -> impl Responder {
     HttpResponse::Ok().body("Hello from Actix-Web!")
@@ -38,7 +39,11 @@ async fn main() -> std::io::Result<()> {
     // histogram
     tokio::spawn(async {
         println!("Starting simulated request latency thread");
-        describe_histogram!("request_latency", Unit::BitsPerSecond, "Simulated latency of HTTP requests in milliseconds");
+        describe_histogram!(
+            "request_latency",
+            Unit::Milliseconds,
+            "Simulated latency of HTTP requests in milliseconds"
+        );
 
         loop {
             // Simulate variable latency between 10-500ms
@@ -60,7 +65,10 @@ async fn main() -> std::io::Result<()> {
 
     tokio::spawn(async {
         println!("Starting simulated request latency thread");
-        describe_gauge!("request_latency_gauge", "Simulated latency of HTTP requests in milliseconds");
+        describe_gauge!(
+            "request_latency_gauge",
+            "Simulated latency of HTTP requests in milliseconds"
+        );
 
         loop {
             // Simulate variable latency between 10-500ms
@@ -78,10 +86,15 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-
-
     HttpServer::new(|| {
-        let metrics_actix_dashboard = create_metrics_actx_scope().unwrap();
+        let dashboard_input = DashboardInput {
+            buckets_for_metrics: vec![(
+                Matcher::Prefix("request_latency".to_string()),
+                &[10.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0],
+            )],
+        };
+
+        let metrics_actix_dashboard = create_metrics_actx_scope(&dashboard_input).unwrap();
         App::new()
             .route("/", web::get().to(hello))
             .service(metrics_actix_dashboard)

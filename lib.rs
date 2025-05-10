@@ -3,13 +3,6 @@
 //! This module provides Prometheus metrics integration for Actix web applications.
 //! It exposes metrics via HTTP endpoints and includes a dashboard for visualization.
 
-/// Re-export of the `metrics` crate for measuring and recording application metrics
-pub use metrics;
-/// Re-export of the `metrics_exporter_prometheus` crate for exposing metrics in Prometheus format
-pub use metrics_exporter_prometheus;
-/// Re-export of the `metrics_util` crate for utility functions related to metrics
-pub use metrics_util;
-
 use actix_web::{HttpResponse, Responder, Scope, web};
 use anyhow::{Context, Result};
 use log::debug;
@@ -30,11 +23,11 @@ static PROMETHEUS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 #[folder = "public/"]
 struct Asset;
 
-#[derive(Debug, Clone, Default)]
-pub struct DashboardInput<'a> {
+#[derive(Debug, Clone)]
+pub struct DashboardOptions {
     /// You can specify a custom set of buckets for the histogram.
     /// This is useful if you want to override the default buckets.
-    pub buckets_for_metrics: Vec<(Matcher, &'a [f64])>,
+    pub buckets: [(impl ToString, [f64])]
 }
 
 /// Serves embedded files from the Asset struct
@@ -105,7 +98,7 @@ async fn get_prometheus_metrics() -> impl Responder {
 /// # Returns
 ///
 /// Result indicating success or failure of configuration
-fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
+fn configure_metrics_recorders_once() -> Result<()> {
     let mutex = IS_CONFIGURED.get_or_init(|| Mutex::new(false));
     let mut is_ok = mutex
         .lock()
@@ -121,18 +114,9 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
 
     *is_ok = true;
 
-    let mut prometheus_recorder = PrometheusBuilder::new();
-
-    if !input.buckets_for_metrics.is_empty() {
-        for (matcher, buckets) in input.buckets_for_metrics.iter() {
-            prometheus_recorder = prometheus_recorder
-                .set_buckets_for_metric(matcher.to_owned(), buckets)
-                .expect("x");
-        }
-    }
-
-    let prometheus_recorder = prometheus_recorder
+    let prometheus_recorder = PrometheusBuilder::new()
         .set_enable_unit_suffix(true)
+        .expect("err")
         .build_recorder();
 
     PROMETHEUS_HANDLE
@@ -161,8 +145,8 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
 /// # Returns
 ///
 /// Result containing the configured Actix web Scope or an error
-pub fn create_metrics_actx_scope(input: &DashboardInput) -> Result<Scope> {
-    configure_metrics_recorders_once(input)?;
+pub fn create_metrics_actx_scope(input: &DashboardOptions) -> Result<Scope> {
+    configure_metrics_recorders_once()?;
     let scope = web::scope("/metrics")
         .service(get_prometheus_metrics)
         .service(get_dashboard)
