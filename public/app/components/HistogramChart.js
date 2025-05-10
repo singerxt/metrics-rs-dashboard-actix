@@ -25,6 +25,22 @@ function HistogramChart({ metricSample }) {
     });
 
     const options = {
+      title: {
+        text: metricSample.name,
+        align: "left",
+        style: {
+          fontSize: "24px",
+          color: "#fff",
+        },
+      },
+      subtitle: {
+        text: `${metricSample.help}`,
+        align: "left",
+        style: {
+          fontSize: "16px",
+          color: "#fff",
+        },
+      },
       chart: {
         type: "bar",
         height: 350,

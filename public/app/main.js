@@ -26,6 +26,7 @@ function App(props) {
   const [debouncedRefreshRate, setDebouncedRefreshRate] = useState(refreshRate);
   const [debouncedSearchValue, setDebouncedSearchValue] = useState(searchValue);
   const [debouncedBufferSize, setDebouncedBufferSize] = useState(bufferSize);
+  const [pause, setPause] = useState(false);
 
   // Use useMemo for expensive calculations that depend on specific inputs
   const debouncedSetRefreshRate = useMemo(
@@ -121,12 +122,18 @@ function App(props) {
             min="1"
           />
         </label>
+        <label>
+          <button onClick=${() => setPause(!pause)} class="container">
+            ${pause ? "play" : "pause"}
+          </button>
+        </label>
       </section>
       <section>
         <${ChartGrid}
           searchValue=${debouncedSearchValue}
           refreshRate=${debouncedRefreshRate}
           bufferSize=${debouncedBufferSize}
+          pause=${pause}
         />
       </section>
     </div>

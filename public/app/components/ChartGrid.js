@@ -30,11 +30,15 @@ const renderChart = (sample) => {
   }
 };
 
-function ChartGrid({ searchValue, refreshRate, bufferSize }) {
+function ChartGrid({ searchValue, refreshRate, bufferSize, pause }) {
   const [metrics, setMetrics] = useState([]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
+      if (pause) {
+        return;
+      }
+
       try {
         const metrics = await prometheusImporter.fetchMetrics();
         metricBuffer.addMetrics(metrics);
@@ -49,7 +53,7 @@ function ChartGrid({ searchValue, refreshRate, bufferSize }) {
       }
     }, refreshRate);
     return () => clearInterval(interval);
-  }, [refreshRate, searchValue]);
+  }, [refreshRate, searchValue, pause]);
 
   useEffect(() => {
     metricBuffer.setBufferSize(bufferSize);
