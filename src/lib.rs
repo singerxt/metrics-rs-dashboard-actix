@@ -132,7 +132,7 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
     }
 
     let prometheus_recorder = prometheus_recorder
-        .set_enable_unit_suffix(true)
+        .set_enable_unit_suffix(false)
         .build_recorder();
 
     PROMETHEUS_HANDLE

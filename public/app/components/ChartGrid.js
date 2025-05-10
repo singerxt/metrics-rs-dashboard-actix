@@ -8,6 +8,7 @@ import MetricBuffer from "../common/MetricBuffer.js";
 import PrometheusImport from "../common/PrometheusImport.js";
 import CounterChart from "./CounterChart.js";
 import GaugeChart from "./GaugeChart.js";
+import HistogramChart from "./HistogramChart.js";
 
 const metricBuffer = new MetricBuffer(10);
 const prometheusImporter = new PrometheusImport("./prometheus");
@@ -19,6 +20,10 @@ const renderChart = (sample) => {
     }
     case "GAUGE": {
       return html`<${GaugeChart} metricSample=${sample} />`;
+    }
+    case "HISTOGRAM": {
+      console.log("histogram", sample);
+      return html`<${HistogramChart} metricSample=${sample} />`;
     }
     default: {
       return html`<h1>Unsupported metric type: ${sample.type}</h1>`;
