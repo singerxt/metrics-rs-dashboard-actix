@@ -1,38 +1,11 @@
 import { html, useEffect, useRef } from "https://esm.sh/htm/preact/standalone";
+import { groupByLabelType } from "../common/metricUtils.js";
 
 function CounterChart({ metricSample }) {
   const chartRef = useRef(null);
 
   useEffect(() => {
-    const data = metricSample.metrics.map((metric) => {
-      return {
-        x: new Date(metric.timestamp).getTime(),
-        y: metric.value,
-      };
-    });
-
-    const dataByLabelType = metricSample.metrics.reduce((acc, metric) => {
-      const label = metric.labels.type;
-      const current = acc.find((item) => item.name === label);
-
-      if (current) {
-        current.data.push({
-          x: new Date(metric.timestamp).getTime(),
-          y: metric.value,
-        });
-      } else {
-        acc.push({
-          name: label,
-          data: [
-            {
-              x: new Date(metric.timestamp).getTime(),
-              y: metric.value,
-            },
-          ],
-        });
-      }
-      return acc;
-    }, []);
+    const dataByLabelType = groupByLabelType(metricSample.metrics);
 
     const options = {
       title: {
@@ -44,7 +17,7 @@ function CounterChart({ metricSample }) {
         },
       },
       subtitle: {
-        text: `${metricSample.help} | current: ${data[data.length - 1].y}`,
+        text: `${metricSample.help}`,
         align: "left",
         style: {
           fontSize: "16px",
