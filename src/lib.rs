@@ -127,7 +127,7 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
         for (matcher, buckets) in input.buckets_for_metrics.iter() {
             prometheus_recorder = prometheus_recorder
                 .set_buckets_for_metric(matcher.to_owned(), buckets)
-                .expect("x");
+                .map_err(|e| anyhow::anyhow!("Failed to set buckets for metric: {}", e))?;
         }
     }
 
