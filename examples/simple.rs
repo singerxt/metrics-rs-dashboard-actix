@@ -1,8 +1,6 @@
-use std::thread;
-
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
-use metrics::{Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge};
+use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge};
 use metrics_rs_dashboard_actix::{DashboardInput, create_metrics_actx_scope};
 use metrics_exporter_prometheus::Matcher;
 
@@ -21,15 +19,16 @@ async fn main() -> std::io::Result<()> {
 
         loop {
             let random_number = rand::random_range(0..10);
+            let another_random_number = rand::random_range(0..10);
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            counter!("async_counter").increment(random_number);
+            counter!("async_counter", "type" => "test").increment(random_number);
+            counter!("async_counter", "type" => "test_2").increment(another_random_number);
         }
     });
 
     tokio::spawn(async {
         describe_histogram!(
             "request_latency",
-            Unit::Milliseconds,
             "Simulated latency of HTTP requests in milliseconds"
         );
         describe_gauge!(

@@ -85,6 +85,16 @@ histogram!("request_latency", "milliseconds").record(42.0);
 gauge!("active_connections").set(5.0);
 ```
 
+## Grouoping Counter and Gauge metrics
+
+You can use type label to group counter or gauges into single chart.
+
+```rust
+describe_gauge!("request_latency");
+gauge!("request_latency", "type" => "success").set(42.0);
+gauge!("request_latency", "type" => "error").set(100.0);
+```
+
 ## Custom Histogram Buckets
 
 You can define custom histogram buckets for more precise measurements:

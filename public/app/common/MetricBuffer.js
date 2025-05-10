@@ -18,6 +18,17 @@ class MetricBuffer {
     }
   }
 
+  // buffer size * unique labels for metric
+  calculateBufferSize(metrics) {
+    const uniqueLabels = new Set();
+    for (const sample of metrics) {
+      if (sample?.labels?.type) {
+        uniqueLabels.add(sample.labels.type);
+      }
+    }
+    return this.#bufferSize * (uniqueLabels.size || 1);
+  }
+
   /**
    * Adds new metrics to the buffer, maintaining the buffer size limit
    * @param {Array} metrics - Array of metric samples to add
@@ -42,7 +53,9 @@ class MetricBuffer {
         return;
       }
 
-      if (currentSample.metrics.length >= this.#bufferSize) {
+      if (
+        currentSample.metrics.length >= this.calculateBufferSize(sample.metrics)
+      ) {
         currentSample.metrics.shift();
       }
 

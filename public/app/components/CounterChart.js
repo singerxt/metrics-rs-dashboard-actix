@@ -11,6 +11,29 @@ function CounterChart({ metricSample }) {
       };
     });
 
+    const dataByLabelType = metricSample.metrics.reduce((acc, metric) => {
+      const label = metric.labels.type;
+      const current = acc.find((item) => item.name === label);
+
+      if (current) {
+        current.data.push({
+          x: new Date(metric.timestamp).getTime(),
+          y: metric.value,
+        });
+      } else {
+        acc.push({
+          name: label,
+          data: [
+            {
+              x: new Date(metric.timestamp).getTime(),
+              y: metric.value,
+            },
+          ],
+        });
+      }
+      return acc;
+    }, []);
+
     const options = {
       title: {
         text: metricSample.name,
@@ -47,12 +70,7 @@ function CounterChart({ metricSample }) {
           },
         },
       },
-      series: [
-        {
-          name: "Counter Value",
-          data: data,
-        },
-      ],
+      series: dataByLabelType,
       xaxis: {
         type: "datetime",
         title: {
