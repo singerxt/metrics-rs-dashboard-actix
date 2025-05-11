@@ -11,6 +11,7 @@
 
 /// Re-export of the `metrics` crate for measuring and recording application metrics
 pub use metrics;
+use metrics::{Counter, CounterFn, Gauge, GaugeFn, Histogram, HistogramFn, Key, Recorder};
 /// Re-export of the `metrics_exporter_prometheus` crate for exposing metrics in Prometheus format
 pub use metrics_exporter_prometheus;
 /// Re-export of the `metrics_util` crate for utility functions related to metrics
@@ -24,12 +25,14 @@ use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use metrics_util::layers::FanoutBuilder;
 use mime_guess::from_path;
 use rust_embed::Embed;
-use std::sync::{Mutex, OnceLock};
+use std::{collections::HashMap, sync::{Arc, Mutex, OnceLock}};
 
 /// Global flag to track if metrics recorders have been configured
 static IS_CONFIGURED: OnceLock<Mutex<bool>> = OnceLock::new();
 /// Global Prometheus recorder instance
 static PROMETHEUS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
+
+static UNITS_FOR_METRICS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
 /// Embedded assets for the metrics dashboard
 #[derive(Embed)]
@@ -47,6 +50,68 @@ pub struct DashboardInput<'a> {
     ///
     /// This allows fine-tuning the histogram resolution for specific metrics.
     pub buckets_for_metrics: Vec<(Matcher, &'a [f64])>,
+}
+
+#[derive(Debug)]
+struct UnitRecorder;
+
+#[derive(Clone, Debug)]
+struct UnitRecorderHandle(Key);
+
+impl CounterFn for UnitRecorderHandle {
+    fn increment(&self, value: u64) {
+        // No-op
+    }
+
+    fn absolute(&self, value: u64) {
+        // No-op
+    }
+}
+
+impl GaugeFn for UnitRecorderHandle {
+    fn increment(&self, value: f64) {
+        // No-op
+    }
+
+    fn decrement(&self, value: f64) {
+        // No-op
+    }
+
+    fn set(&self, value: f64) {
+        // No-op
+    }
+}
+
+impl HistogramFn for UnitRecorderHandle {
+    fn record(&self, value: f64) {
+        // No-op
+    }
+}
+
+impl Recorder for UnitRecorder {
+    fn describe_counter(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, description: metrics::SharedString) {
+        todo!()
+    }
+
+    fn describe_gauge(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, description: metrics::SharedString) {
+        todo!()
+    }
+
+    fn describe_histogram(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, description: metrics::SharedString) {
+        todo!()
+    }
+
+    fn register_counter(&self, key: &metrics::Key, metadata: &metrics::Metadata<'_>) -> metrics::Counter {
+        Counter::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
+    }
+
+    fn register_gauge(&self, key: &metrics::Key, metadata: &metrics::Metadata<'_>) -> metrics::Gauge {
+        Gauge::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
+    }
+
+    fn register_histogram(&self, key: &metrics::Key, metadata: &metrics::Metadata<'_>) -> metrics::Histogram {
+        Histogram::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
+    }
 }
 
 /// Serves embedded files from the Asset struct
