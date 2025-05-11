@@ -14,7 +14,6 @@ async fn main() -> std::io::Result<()> {
     info!("Starting Actix-Web server with metrics at /metrics");
 
     tokio::spawn(async {
-        println!("Starting async thread");
         describe_counter!("async_counter", "Incrementing by random number");
 
         loop {
@@ -23,6 +22,18 @@ async fn main() -> std::io::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             counter!("async_counter", "type" => "test").increment(random_number);
             counter!("async_counter", "type" => "test_2").increment(another_random_number);
+        }
+    });
+
+    tokio::spawn(async {
+        describe_gauge!("async_gauge", "Random number gauge");
+
+        loop {
+            let random_number = rand::random_range(0..10);
+            let another_random_number = rand::random_range(0..10);
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            gauge!("async_gauge", "type" => "gauge_1").set(random_number);
+            gauge!("async_gauge", "type" => "gauge_2").set(another_random_number);
         }
     });
 
