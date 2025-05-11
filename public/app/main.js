@@ -214,7 +214,7 @@ function App(props) {
             min="1"
           />
         </label>
-        <label>
+        <label style="display: flex; align-items: center;">
           <button onClick=${() => setPause(!pause)} class="container">
             ${pause ? "play" : "pause"}
           </button>
