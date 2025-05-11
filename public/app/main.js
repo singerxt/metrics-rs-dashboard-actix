@@ -10,25 +10,97 @@ import apexDefaultTheme from "./common/apexDefaultTheme.js";
 import debounce from "./common/debounce.js";
 import ChartGrid from "./components/ChartGrid.js";
 
+/**
+ * Initializes the default Apex chart theme
+ */
 apexDefaultTheme();
 
 // Constants for debounce timing
+/**
+ * Time in milliseconds to debounce refresh rate changes
+ * @constant {number}
+ */
 const REFRESH_DEBOUNCE_MS = 500;
+
+/**
+ * Time in milliseconds to debounce search input changes
+ * @constant {number}
+ */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * Time in milliseconds to debounce buffer size changes
+ * @constant {number}
+ */
 const BUFFER_SIZE_DEBOUNCE_MS = 300;
+
+/**
+ * Default size of the metric buffer (history length)
+ * @constant {number}
+ */
 const METRIC_BUFFER_SIZE_DEFAULT = 10;
+
+/**
+ * Minimum allowed refresh rate in milliseconds
+ * @constant {number}
+ */
 const MIN_REFRESH_RATE = 100;
 
+/**
+ * Main application component
+ *
+ * @param {Object} props - Component properties
+ * @returns {import("preact").VNode} Rendered component
+ */
 function App(props) {
+  // State for user inputs
+  /**
+   * Current refresh rate in milliseconds
+   * @type {[number, Function]}
+   */
   const [refreshRate, setRefreshRate] = useState(1000);
+
+  /**
+   * Current search filter value
+   * @type {[string, Function]}
+   */
   const [searchValue, setSearchValue] = useState("");
+
+  /**
+   * Current buffer size (history length)
+   * @type {[number, Function]}
+   */
   const [bufferSize, setBufferSize] = useState(METRIC_BUFFER_SIZE_DEFAULT);
+
+  // State for debounced values
+  /**
+   * Debounced refresh rate to reduce unnecessary updates
+   * @type {[number, Function]}
+   */
   const [debouncedRefreshRate, setDebouncedRefreshRate] = useState(refreshRate);
+
+  /**
+   * Debounced search value to reduce unnecessary filtering
+   * @type {[string, Function]}
+   */
   const [debouncedSearchValue, setDebouncedSearchValue] = useState(searchValue);
+
+  /**
+   * Debounced buffer size to reduce unnecessary resizing
+   * @type {[number, Function]}
+   */
   const [debouncedBufferSize, setDebouncedBufferSize] = useState(bufferSize);
+
+  /**
+   * Whether data collection is paused
+   * @type {[boolean, Function]}
+   */
   const [pause, setPause] = useState(false);
 
-  // Use useMemo for expensive calculations that depend on specific inputs
+  /**
+   * Debounced function to update refresh rate
+   * @type {Function}
+   */
   const debouncedSetRefreshRate = useMemo(
     () =>
       debounce((value) => {
@@ -37,6 +109,10 @@ function App(props) {
     [], // Empty dependency array means this is created only once
   );
 
+  /**
+   * Debounced function to update search value
+   * @type {Function}
+   */
   const debouncedSetSearchValue = useMemo(
     () =>
       debounce((value) => {
@@ -45,6 +121,10 @@ function App(props) {
     [], // Empty dependency array means this is created only once
   );
 
+  /**
+   * Debounced function to update buffer size
+   * @type {Function}
+   */
   const debouncedSetBufferSize = useMemo(
     () =>
       debounce((value) => {
@@ -53,7 +133,10 @@ function App(props) {
     [], // Empty dependency array means this is created only once
   );
 
-  // Use a more efficient event handler
+  /**
+   * Handles refresh rate input changes
+   * @param {Event} e - Input change event
+   */
   const handleRefreshRateChange = useCallback((e) => {
     const value = Math.max(
       MIN_REFRESH_RATE,
@@ -62,15 +145,24 @@ function App(props) {
     setRefreshRate(value);
   }, []);
 
+  /**
+   * Handles search input changes
+   * @param {Event} e - Input change event
+   */
   const handleSearchChange = useCallback((e) => {
     setSearchValue(e.target.value);
   }, []);
 
+  /**
+   * Handles buffer size input changes
+   * @param {Event} e - Input change event
+   */
   const handleBufferSizeChange = useCallback((e) => {
     const value = Math.max(1, Number.parseInt(e.target.value) || 1);
     setBufferSize(value);
   }, []);
 
+  // Effect hooks to trigger debounced updates when values change
   useEffect(() => {
     debouncedSetRefreshRate(refreshRate);
   }, [refreshRate, debouncedSetRefreshRate]);

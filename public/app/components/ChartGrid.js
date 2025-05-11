@@ -10,9 +10,23 @@ import CounterChart from "./CounterChart.js";
 import GaugeChart from "./GaugeChart.js";
 import HistogramChart from "./HistogramChart.js";
 
+/**
+ * Buffer for storing metric data with a default size of 10
+ * @type {MetricBuffer}
+ */
 const metricBuffer = new MetricBuffer(10);
+
+/**
+ * Importer for Prometheus metrics from the ./prometheus endpoint
+ * @type {PrometheusImport}
+ */
 const prometheusImporter = new PrometheusImport("./prometheus");
 
+/**
+ * Renders the appropriate chart component based on metric type
+ * @param {Object} sample - The metric sample data
+ * @returns {JSX.Element} The rendered chart component
+ */
 const renderChart = (sample) => {
   switch (sample.type) {
     case "COUNTER": {
@@ -30,9 +44,26 @@ const renderChart = (sample) => {
   }
 };
 
+/**
+ * ChartGrid component that displays metric charts in a responsive grid
+ * @component
+ * @param {Object} props - Component props
+ * @param {string} props.searchValue - Text to filter metrics by name
+ * @param {number} props.refreshRate - How often to refresh metrics in milliseconds
+ * @param {number} props.bufferSize - Size of the metric buffer
+ * @param {boolean} props.pause - Whether to pause metric updates
+ * @returns {JSX.Element} Rendered grid of metric charts
+ */
 function ChartGrid({ searchValue, refreshRate, bufferSize, pause }) {
+  /**
+   * State for storing the filtered metrics
+   * @type {[Array, Function]}
+   */
   const [metrics, setMetrics] = useState([]);
 
+  /**
+   * Effect for fetching and updating metrics at the specified refresh rate
+   */
   useEffect(() => {
     const interval = setInterval(async () => {
       if (pause) {
@@ -55,6 +86,9 @@ function ChartGrid({ searchValue, refreshRate, bufferSize, pause }) {
     return () => clearInterval(interval);
   }, [refreshRate, searchValue, pause]);
 
+  /**
+   * Effect for updating the buffer size when it changes
+   */
   useEffect(() => {
     metricBuffer.setBufferSize(bufferSize);
   }, [bufferSize]);

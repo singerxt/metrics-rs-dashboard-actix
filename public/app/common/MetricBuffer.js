@@ -18,7 +18,12 @@ class MetricBuffer {
     }
   }
 
-  // buffer size * unique labels for metric
+  /**
+   * Calculates the total buffer size based on unique label types
+   * @private
+   * @param {Array} metrics - Array of metric data points
+   * @returns {number} The calculated buffer size
+   */
   calculateBufferSize(metrics) {
     const uniqueLabels = new Set();
     for (const sample of metrics) {
@@ -94,6 +99,10 @@ class MetricBuffer {
     }
   }
 
+  /**
+   * Returns all metrics stored in the buffer
+   * @returns {Array} Array of all metric samples
+   */
   getMetrics() {
     return Array.from(this.#buffer.values());
   }
