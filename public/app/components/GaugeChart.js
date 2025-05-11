@@ -1,4 +1,5 @@
 import { html, useEffect, useRef } from "https://esm.sh/htm/preact/standalone";
+import { groupByLabelType } from "../common/metricUtils.js";
 
 function normalizeFloat(value) {
   if (Number.isInteger(value)) {
@@ -12,12 +13,7 @@ function GaugeChart({ metricSample }) {
   const chartRef = useRef(null);
 
   useEffect(() => {
-    const data = metricSample.metrics.map((metric) => {
-      return {
-        x: new Date(metric.timestamp).getTime(),
-        y: normalizeFloat(metric.value),
-      };
-    });
+    const dataByLabelType = groupByLabelType(metricSample.metrics);
 
     const options = {
       title: {
@@ -29,7 +25,7 @@ function GaugeChart({ metricSample }) {
         },
       },
       subtitle: {
-        text: `${metricSample.help} | current: ${data[data.length - 1].y}`,
+        text: metricSample.help,
         align: "left",
         style: {
           fontSize: "16px",
@@ -55,12 +51,7 @@ function GaugeChart({ metricSample }) {
           },
         },
       },
-      series: [
-        {
-          name: "Counter Value",
-          data: data,
-        },
-      ],
+      series: dataByLabelType,
       xaxis: {
         type: "datetime",
         title: {
@@ -70,6 +61,9 @@ function GaugeChart({ metricSample }) {
       yaxis: {
         title: {
           text: "Value",
+        },
+        labels: {
+          formatter: normalizeFloat,
         },
       },
       tooltip: {

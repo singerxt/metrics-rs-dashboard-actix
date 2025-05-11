@@ -2,7 +2,7 @@
 // This is used to create a chart with multiple series, each representing a different label type.
 function groupByLabelType(metrics) {
   return metrics.reduce((acc, metric) => {
-    const label = metric.labels.type;
+    const label = metric?.labels?.type || "default";
     const current = acc.find((item) => item.name === label);
 
     if (current) {
