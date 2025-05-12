@@ -1,6 +1,6 @@
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
-use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge};
+use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, Unit};
 use metrics_rs_dashboard_actix::{DashboardInput, create_metrics_actx_scope};
 use metrics_exporter_prometheus::Matcher;
 
@@ -14,7 +14,7 @@ async fn main() -> std::io::Result<()> {
     info!("Starting Actix-Web server with metrics at /metrics");
 
     tokio::spawn(async {
-        describe_counter!("async_counter", "Incrementing by random number");
+        describe_counter!("async_counter", Unit::Count, "Incrementing by random number");
 
         loop {
             let random_number = rand::random_range(0..10);
@@ -26,7 +26,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     tokio::spawn(async {
-        describe_gauge!("async_gauge", "Random number gauge");
+        describe_gauge!("async_gauge", Unit::Milliseconds, "Random number gauge");
 
         loop {
             let random_number = rand::random_range(0..10);
@@ -40,10 +40,12 @@ async fn main() -> std::io::Result<()> {
     tokio::spawn(async {
         describe_histogram!(
             "request_latency",
+            Unit::Milliseconds,
             "Simulated latency of HTTP requests in milliseconds"
         );
         describe_gauge!(
             "request_latency_gauge",
+            Unit::Milliseconds,
             "Simulated latency of HTTP requests in milliseconds"
         );
 

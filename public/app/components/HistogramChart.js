@@ -5,6 +5,7 @@ function HistogramChart({ metricSample }) {
 
   useEffect(() => {
     const latestSample = metricSample.metrics[metricSample.metrics.length - 1];
+    const unit = metricSample.unit || "count";
     if (!latestSample || !latestSample.buckets) return;
 
     const buckets = latestSample.buckets;
@@ -72,7 +73,7 @@ function HistogramChart({ metricSample }) {
       },
       yaxis: {
         title: {
-          text: "Count",
+          text: unit,
         },
       },
       tooltip: {
