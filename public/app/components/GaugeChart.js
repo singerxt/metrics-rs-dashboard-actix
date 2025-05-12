@@ -11,9 +11,9 @@ function normalizeFloat(value) {
 
 function GaugeChart({ metricSample }) {
   const chartRef = useRef(null);
-
   useEffect(() => {
     const dataByLabelType = groupByLabelType(metricSample.metrics);
+    const unit = metricSample.unit || "count";
 
     const options = {
       title: {
@@ -60,7 +60,7 @@ function GaugeChart({ metricSample }) {
       },
       yaxis: {
         title: {
-          text: "Value",
+          text: unit,
         },
         labels: {
           formatter: normalizeFloat,

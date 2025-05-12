@@ -1,4 +1,4 @@
-import parsePrometheusTextFormat from 'https://cdn.jsdelivr.net/npm/parse-prometheus-text-format@1.1.1/+esm';
+import parsePrometheusTextFormat from "https://cdn.jsdelivr.net/npm/parse-prometheus-text-format@1.1.1/+esm";
 
 /**
  * PrometheusImport class for fetching metrics from a Prometheus endpoint.
@@ -23,8 +23,14 @@ class PrometheusImport {
       throw new Error(`Failed to fetch metrics: ${response.statusText}`);
     }
     const text = await response.text();
+    const header = response.headers.get("x-dashboard-metrics-unit");
+    const units = JSON.parse(header);
     const promJson = parsePrometheusTextFormat(text);
-    console.info("Fetched metrics..", promJson);
+
+    for (const sample of promJson) {
+      sample.unit = units[sample.name] || "count";
+    }
+
     return promJson;
   }
 }

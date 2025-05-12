@@ -6,7 +6,7 @@ function CounterChart({ metricSample }) {
 
   useEffect(() => {
     const dataByLabelType = groupByLabelType(metricSample.metrics);
-
+    const unit = metricSample.unit || "count";
     const options = {
       title: {
         text: metricSample.name,
@@ -52,7 +52,7 @@ function CounterChart({ metricSample }) {
       },
       yaxis: {
         title: {
-          text: "Value",
+          text: unit,
         },
       },
       tooltip: {
