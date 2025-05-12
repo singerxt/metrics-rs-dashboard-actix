@@ -29,7 +29,7 @@ pub use metrics_exporter_prometheus;
 pub use metrics_util;
 
 use actix_web::{HttpResponse, Responder, Scope, web};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::debug;
 use log_once::debug_once;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
@@ -96,6 +96,7 @@ struct UnitRecorder;
 /// This is a no-op implementation that just stores the metric key
 /// but doesn't actually record any values.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct UnitRecorderHandle(Key);
 
 impl CounterFn for UnitRecorderHandle {

@@ -8,9 +8,10 @@ A Rust library for integrating metrics and a visualization dashboard. This crate
 ## Features
 
 - Easy integration with any Rust application (Actix currently required for dashboard exposure only)
-- Real-time metrics visualization dashboard
+- Real-time metrics visualization dashboard with unit-aware charts
 - Prometheus metrics endpoint
 - Support for custom histogram buckets
+- Unit support for all metric types (displayed in charts)
 - Low overhead metrics collection
 - Full compatibility with the `metrics` ecosystem
 - No custom recorders, leveraging the existing metrics-prometheus-exporter
@@ -83,27 +84,48 @@ Future versions may provide additional integration options for other web framewo
 This library re-exports the `metrics` crate, so you can use all its functionality:
 
 ```rust
-use metrics_actix_dashboard::metrics::{counter, histogram, gauge};
+use metrics_actix_dashboard::metrics::{counter, histogram, gauge, Unit};
 
 // Define and use counters
 counter!("my_counter").increment(1);
 
-// Define and use histograms
-histogram!("request_latency", "milliseconds").record(42.0);
+// Define and use histograms with units (displayed on charts)
+histogram!("request_latency", Unit::Milliseconds, 42.0);
 
-// Define and use gauges
-gauge!("active_connections").set(5.0);
+// Define and use gauges with units (displayed on charts)
+gauge!("active_connections", Unit::Count, 5.0);
+
+// Memory usage with byte units
+gauge!("memory_usage", Unit::Bytes, 1024.0 * 1024.0);
+
+// CPU usage with percent unit
+gauge!("cpu_usage", Unit::Percent, 45.3);
 ```
 
-## Grouoping Counter and Gauge metrics
+The units you specify (like Seconds, Bytes, Percent, etc.) will be automatically displayed on the dashboard charts, making your metrics more readable and providing immediate context for the displayed values.
 
-You can use type label to group counter or gauges into single chart.
+## Grouping Counter and Gauge metrics with Units
+
+You can use type label to group counter or gauges into single chart. You can also add units to your metrics using the `describe_*` macros:
 
 ```rust
-describe_gauge!("request_latency");
+// Define a gauge with milliseconds unit (will be displayed on charts)
+describe_gauge!("request_latency", Unit::Milliseconds, "HTTP request latency");
 gauge!("request_latency", "type" => "success").set(42.0);
 gauge!("request_latency", "type" => "error").set(100.0);
+
+// Define a counter with bytes unit
+describe_counter!("network_traffic", Unit::Bytes, "Network traffic volume");
+counter!("network_traffic", "direction" => "inbound").increment(2048);
+counter!("network_traffic", "direction" => "outbound").increment(1024);
+
+// Define a histogram with seconds unit
+describe_histogram!("processing_time", Unit::Seconds, "Task processing duration");
+histogram!("processing_time", "priority" => "high").record(0.25);
+histogram!("processing_time", "priority" => "low").record(1.5);
 ```
+
+The dashboard will automatically display these units (milliseconds, bytes, seconds, etc.) on the charts, making your metrics more readable and contextual.
 
 ## Custom Histogram Buckets
 
@@ -130,6 +152,22 @@ let dashboard_input = DashboardInput {
 
 let metrics_scope = create_metrics_actx_scope(&dashboard_input).unwrap();
 ```
+
+## Available Units
+
+The following units are available for your metrics and will be displayed on charts:
+
+- `Unit::Count` - Default unit for counters and gauges
+- `Unit::Bytes` - Bytes (for memory, file sizes, etc.)
+- `Unit::Seconds` - Seconds (for durations)
+- `Unit::Milliseconds` - Milliseconds (for shorter durations)
+- `Unit::Microseconds` - Microseconds (for very short durations)
+- `Unit::Nanoseconds` - Nanoseconds (for extremely short durations)
+- `Unit::Percent` - Percentage values (0-100)
+- `Unit::TebiBytes` - TiB (2^40 bytes)
+- `Unit::GibiBytes` - GiB (2^30 bytes)
+- `Unit::MebiBytes` - MiB (2^20 bytes)
+- `Unit::KibiBytes` - KiB (2^10 bytes)
 
 ## Documentation
 

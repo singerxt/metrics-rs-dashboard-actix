@@ -14,7 +14,7 @@ async fn main() -> std::io::Result<()> {
     info!("Starting Actix-Web server with metrics at /metrics");
 
     tokio::spawn(async {
-        describe_counter!("async_counter", "Incrementing by random number");
+        describe_counter!("async_counter", Unit::Count, "Incrementing by random number");
 
         loop {
             let random_number = rand::random_range(0..10);
@@ -40,10 +40,12 @@ async fn main() -> std::io::Result<()> {
     tokio::spawn(async {
         describe_histogram!(
             "request_latency",
+            Unit::Milliseconds,
             "Simulated latency of HTTP requests in milliseconds"
         );
         describe_gauge!(
             "request_latency_gauge",
+            Unit::Milliseconds,
             "Simulated latency of HTTP requests in milliseconds"
         );
 
