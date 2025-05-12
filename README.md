@@ -18,7 +18,6 @@ A Rust library for integrating metrics and a visualization dashboard. This crate
 ## Inspiration
 
 This library is inspired by [metrics-dashboard-rs](https://github.com/giangndm/metrics-dashboard-rs) but with key differences:
-- Does not implement custom recorders
 - Uses `metrics-exporter-prometheus` instead of `prometheus` directly for less overhead
 - Adds support for histograms with custom buckets
 

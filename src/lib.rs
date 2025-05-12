@@ -11,7 +11,7 @@
 
 /// Re-export of the `metrics` crate for measuring and recording application metrics
 pub use metrics;
-use metrics::{Counter, CounterFn, Gauge, GaugeFn, Histogram, HistogramFn, Key, Recorder};
+use metrics::{Counter, CounterFn, Gauge, GaugeFn, Histogram, HistogramFn, Key, Recorder, Unit};
 /// Re-export of the `metrics_exporter_prometheus` crate for exposing metrics in Prometheus format
 pub use metrics_exporter_prometheus;
 /// Re-export of the `metrics_util` crate for utility functions related to metrics
@@ -25,10 +25,11 @@ use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use metrics_util::layers::FanoutBuilder;
 use mime_guess::from_path;
 use rust_embed::Embed;
-use std::{collections::HashMap, sync::{Arc, Mutex, OnceLock}};
+use std::{collections::HashMap, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, OnceLock}};
 
 /// Global flag to track if metrics recorders have been configured
-static IS_CONFIGURED: OnceLock<Mutex<bool>> = OnceLock::new();
+static IS_CONFIGURED: AtomicBool = AtomicBool::new(false);
+
 /// Global Prometheus recorder instance
 static PROMETHEUS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 
@@ -90,15 +91,15 @@ impl HistogramFn for UnitRecorderHandle {
 
 impl Recorder for UnitRecorder {
     fn describe_counter(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, description: metrics::SharedString) {
-        todo!()
+        self.register_unit(key, unit);
     }
 
     fn describe_gauge(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, description: metrics::SharedString) {
-        todo!()
+        self.register_unit(key, unit);
     }
 
     fn describe_histogram(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, description: metrics::SharedString) {
-        todo!()
+        self.register_unit(key, unit);
     }
 
     fn register_counter(&self, key: &metrics::Key, metadata: &metrics::Metadata<'_>) -> metrics::Counter {
@@ -111,6 +112,18 @@ impl Recorder for UnitRecorder {
 
     fn register_histogram(&self, key: &metrics::Key, metadata: &metrics::Metadata<'_>) -> metrics::Histogram {
         Histogram::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
+    }
+}
+
+impl UnitRecorder {
+    fn register_unit(&self, key: metrics::KeyName, unit: Option<metrics::Unit>) {
+        let key = key.as_str().to_owned();
+        let unit = unit.unwrap_or(Unit::Count);
+        let unit = unit.as_str().to_owned();
+        let g_unit = UNITS_FOR_METRICS.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Ok(mut locked) = g_unit.lock() {
+            locked.insert(key, unit);
+        }
     }
 }
 
@@ -172,10 +185,17 @@ async fn get_dashboard_assets(path: web::Path<String>) -> impl Responder {
 async fn get_prometheus_metrics() -> impl Responder {
     debug!("Gathering prometheus metrics...");
     let prometheus_handle = PROMETHEUS_HANDLE.get();
+    let metrics_units = UNITS_FOR_METRICS.get();
+    let mut response = HttpResponse::Ok();
+
+    if let Some(metrics_units) = metrics_units {
+        let header = serde_json::to_string(metrics_units).unwrap_or_default();
+        response.append_header(("x-dashboard-metrics-unit", header));
+    }
 
     if let Some(handle) = prometheus_handle {
         let metrics = handle.render();
-        return HttpResponse::Ok().body(metrics);
+        return response.body(metrics);
     }
 
     HttpResponse::Ok().body(String::from(""))
@@ -203,20 +223,19 @@ async fn get_prometheus_metrics() -> impl Responder {
 /// - Unable to set the Prometheus handle
 /// - Unable to register the global recorder
 fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
-    let mutex = IS_CONFIGURED.get_or_init(|| Mutex::new(false));
-    let mut is_ok = mutex
-        .lock()
-        .map_err(|e| anyhow::anyhow!("Mutex poisoned: {}", e))
-        .with_context(|| "Unable to lock IS_CONFIGURED")?;
-
-    if *is_ok {
-        debug_once!(
-            "You have already configured the metrics recorder. This is a no-op. Multiple configuration attempts are safe because only the first one takes effect, preventing duplicate registrations."
-        );
+    // Return early if already configured, using "Acquire" ordering to ensure
+    // visibility of all operations performed before setting to true
+    if IS_CONFIGURED.load(Ordering::Acquire) {
+        debug_once!("Metrics recorder already configured. Skipping duplicate configuration.");
         return Ok(());
     }
 
-    *is_ok = true;
+    // Try to be the first thread to configure
+    if IS_CONFIGURED.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+        // Another thread configured the metrics in the meantime
+        debug_once!("Another thread configured metrics. Skipping duplicate configuration.");
+        return Ok(());
+    }
 
     let mut prometheus_recorder = PrometheusBuilder::new();
 
@@ -237,6 +256,7 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Unable to set Prometheus handle: {}", e.render()))?;
 
     let fanout = FanoutBuilder::default()
+        .add_recorder(UnitRecorder)
         .add_recorder(prometheus_recorder)
         .build();
 

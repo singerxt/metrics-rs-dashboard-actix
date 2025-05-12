@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Metrics dashboard for Rust applications"
 license = "MIT"
+repository = "https://github.com/singerxt/metrics-rs-dashboard-actix/tree/main"
 
 [dependencies]
 actix-web = "4.10.2"
