@@ -45,4 +45,12 @@ function groupByLabelType(metrics) {
   }, []);
 }
 
-export { groupByLabelType };
+function normalizeFloat(value) {
+  if (Number.isInteger(value)) {
+    return value;
+  }
+
+  return Number.parseFloat(value).toFixed(2);
+}
+
+export { groupByLabelType, normalizeFloat };

@@ -1,13 +1,5 @@
 import { html, useEffect, useRef } from "https://esm.sh/htm/preact/standalone";
-import { groupByLabelType } from "../common/metricUtils.js";
-
-function normalizeFloat(value) {
-  if (Number.isInteger(value)) {
-    return value;
-  }
-
-  return Number.parseFloat(value).toFixed(2);
-}
+import { groupByLabelType, normalizeFloat } from "../common/metricUtils.js";
 
 function GaugeChart({ metricSample }) {
   const chartRef = useRef(null);

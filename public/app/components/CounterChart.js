@@ -1,5 +1,5 @@
 import { html, useEffect, useRef } from "https://esm.sh/htm/preact/standalone";
-import { groupByLabelType } from "../common/metricUtils.js";
+import { groupByLabelType, normalizeFloat } from "../common/metricUtils.js";
 
 function CounterChart({ metricSample }) {
   const chartRef = useRef(null);
@@ -53,6 +53,9 @@ function CounterChart({ metricSample }) {
       yaxis: {
         title: {
           text: unit,
+        },
+        labels: {
+          formatter: normalizeFloat,
         },
       },
       tooltip: {

@@ -1,4 +1,5 @@
 import { html, useEffect, useRef } from "https://esm.sh/htm/preact/standalone";
+import { normalizeFloat } from "../common/metricUtils.js";
 
 function HistogramChart({ metricSample }) {
   const chartRef = useRef(null);
@@ -68,12 +69,15 @@ function HistogramChart({ metricSample }) {
       ],
       xaxis: {
         title: {
-          text: "Value Range",
+          text: `Range of ${unit}`,
         },
       },
       yaxis: {
         title: {
-          text: unit,
+          text: "Count",
+        },
+        labels: {
+          formatter: normalizeFloat,
         },
       },
       tooltip: {
