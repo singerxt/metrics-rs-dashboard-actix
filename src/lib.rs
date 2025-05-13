@@ -328,6 +328,19 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
         .add_recorder(prometheus_recorder)
         .build();
 
+    tokio::spawn(async move {
+        let handle = PROMETHEUS_HANDLE.get();
+
+        if let Some(handle) = handle {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                handle.run_upkeep();
+            }
+        } else {
+            debug!("Prometheus handle not set. Skipping recorder cleanup.");
+        }
+    });
+
     metrics::set_global_recorder(fanout).map_err(|e| {
         anyhow::anyhow!(
             "Unable to register a recorder: {}. Did you call this function multiple times?",

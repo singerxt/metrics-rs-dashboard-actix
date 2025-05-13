@@ -28,7 +28,13 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-metrics-actix-dashboard = "0.1.0"
+metrics-rs-dashboard-actix = "0.1.3"
+```
+
+or
+
+```
+cargo add metrics-rs-dashboard-actix
 ```
 
 ## Quick Start
@@ -78,31 +84,6 @@ Note that while you can use the metrics collection functionality in any Rust app
 This library uses Actix Web solely for exposing the dashboard and metrics endpoints. You can use the metrics collection functionality in any Rust application, regardless of whether your main application uses Actix or not. However, at this moment, Actix Web is required to expose the dashboard and metrics API endpoints.
 
 Future versions may provide additional integration options for other web frameworks.
-
-## Defining Metrics
-
-This library re-exports the `metrics` crate, so you can use all its functionality:
-
-```rust
-use metrics_actix_dashboard::metrics::{counter, histogram, gauge, Unit};
-
-// Define and use counters
-counter!("my_counter").increment(1);
-
-// Define and use histograms with units (displayed on charts)
-histogram!("request_latency", Unit::Milliseconds, 42.0);
-
-// Define and use gauges with units (displayed on charts)
-gauge!("active_connections", Unit::Count, 5.0);
-
-// Memory usage with byte units
-gauge!("memory_usage", Unit::Bytes, 1024.0 * 1024.0);
-
-// CPU usage with percent unit
-gauge!("cpu_usage", Unit::Percent, 45.3);
-```
-
-The units you specify (like Seconds, Bytes, Percent, etc.) will be automatically displayed on the dashboard charts, making your metrics more readable and providing immediate context for the displayed values.
 
 ## Grouping Counter and Gauge metrics with Units
 
