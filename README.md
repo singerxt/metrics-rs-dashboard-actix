@@ -15,7 +15,6 @@ A Rust library for integrating metrics and a visualization dashboard. This crate
 - Unit support for all metric types (displayed in charts)
 - Low overhead metrics collection
 - Full compatibility with the `metrics` ecosystem
-- No custom recorders, leveraging the existing metrics-prometheus-exporter
 
 ## Inspiration
 
