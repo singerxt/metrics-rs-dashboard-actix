@@ -1,6 +1,6 @@
 [![Crates.io](https://img.shields.io/crates/v/metrics-rs-dashboard-actix.svg)](https://crates.io/crates/metrics-rs-dashboard-actix)
 [![Docs.rs](https://docs.rs/metrics-rs-dashboard-actix/badge.svg)](https://docs.rs/metrics-rs-dashboard-actix)
-[![Crates.io Total Downloads](https://img.shields.io/crates/d/metrics-rs-dashboard-actix)]
+![Crates.io Total Downloads](https://img.shields.io/crates/d/metrics-rs-dashboard-actix)
 
 # metrics-rs-dashboard-actix
 A Rust library for integrating metrics and a visualization dashboard. This crate provides a simple way to set up Prometheus metrics and expose them through an API endpoint, as well as a web dashboard for real-time metrics visualization. Actix is used only for exposing the endpoints and dashboard - you can use this library even if your main application isn't built with Actix.
