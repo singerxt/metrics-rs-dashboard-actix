@@ -559,15 +559,7 @@ pub fn update_rate_tracker(_counter_name: &str, value: f64, tracker_key: String)
 
         // Always calculate a rate, even with the same value
         // The RateTracker will handle the logic to determine the actual rate
-        let rate = tracker.update(value);
-
-        // Add optional debug logging (uncomment for troubleshooting)
-        // if rate > 0.0 {
-        //     eprintln!("Rate for {}: {:.2}/sec (value: {}, key: {})",
-        //         _counter_name, rate, value, tracker_key);
-        // }
-
-        rate
+        tracker.update(value)
     } else {
         // If we can't get the lock, attempt a minimal calculation
         // This is better than returning 0.0 which would indicate no activity
