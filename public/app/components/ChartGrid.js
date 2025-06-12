@@ -29,24 +29,35 @@ const prometheusImporter = new PrometheusImport("./prometheus");
  * @returns {JSX.Element} The rendered chart component
  */
 const renderChart = (sample) => {
-  // Check if this is a rate metric (gauge with _rate_per_sec suffix)
-  if (sample.type === "GAUGE" && sample.name.endsWith("_rate_per_sec")) {
-    return html`<${RateChart} metricSample=${sample} />`;
+  if (!sample || !sample.type || !sample.name) {
+    return html`<div class="error-chart">Invalid metric data</div>`;
   }
 
-  switch (sample.type) {
-    case "COUNTER": {
-      return html`<${CounterChart} metricSample=${sample} />`;
+  try {
+    // Check if this is a rate metric (gauge with _rate_per_sec suffix)
+    if (sample.type === "GAUGE" && sample.name.endsWith("_rate_per_sec")) {
+      return html`<${RateChart} metricSample=${sample} />`;
     }
-    case "GAUGE": {
-      return html`<${GaugeChart} metricSample=${sample} />`;
+
+    switch (sample.type) {
+      case "COUNTER": {
+        return html`<${CounterChart} metricSample=${sample} />`;
+      }
+      case "GAUGE": {
+        return html`<${GaugeChart} metricSample=${sample} />`;
+      }
+      case "HISTOGRAM": {
+        return html`<${HistogramChart} metricSample=${sample} />`;
+      }
+      default: {
+        return html`<h1>Unsupported metric type: ${sample.type}</h1>`;
+      }
     }
-    case "HISTOGRAM": {
-      return html`<${HistogramChart} metricSample=${sample} />`;
-    }
-    default: {
-      return html`<h1>Unsupported metric type: ${sample.type}</h1>`;
-    }
+  } catch (error) {
+    console.error("Error rendering chart for", sample.name, error);
+    return html`<div class="error-chart">
+      Error rendering chart: ${sample.name}
+    </div>`;
   }
 };
 
@@ -78,15 +89,35 @@ function ChartGrid({ searchValue, refreshRate, bufferSize, pause }) {
 
       try {
         const metrics = await prometheusImporter.fetchMetrics();
-        metricBuffer.addMetrics(metrics);
-        const filteredMetrics = metricBuffer.getMetrics().filter((sample) => {
-          if (!searchValue) return true;
-          return sample.name.toLowerCase().includes(searchValue.toLowerCase());
-        });
-        setMetrics(filteredMetrics);
+        if (metrics && Array.isArray(metrics)) {
+          metricBuffer.addMetrics(metrics);
+          const filteredMetrics = metricBuffer.getMetrics().filter((sample) => {
+            if (!sample || !sample.name) return false;
+            if (!searchValue) return true;
+            return sample.name
+              .toLowerCase()
+              .includes(searchValue.toLowerCase());
+          });
+          setMetrics(filteredMetrics);
+        }
       } catch (error) {
         console.error("Error fetching metrics:", error);
-        // Optionally display error to user or retry
+        // Display error to user
+        setMetrics((prevMetrics) => {
+          // Keep existing metrics but add an error flag for UI notification
+          if (prevMetrics.length === 0) {
+            // If no metrics, create a dummy entry to show error
+            return [
+              {
+                name: "error",
+                type: "ERROR",
+                help: "Error fetching metrics",
+                metrics: [{ value: error.message }],
+              },
+            ];
+          }
+          return prevMetrics;
+        });
       }
     }, refreshRate);
     return () => clearInterval(interval);
@@ -101,7 +132,11 @@ function ChartGrid({ searchValue, refreshRate, bufferSize, pause }) {
 
   return html`
     <div class="responsive-grid">
-      ${metrics.map((sample) => renderChart(sample))}
+      ${metrics && metrics.length > 0
+        ? metrics.map((sample) => (sample ? renderChart(sample) : null))
+        : html`<div class="empty-state">
+            No metrics available. Please check your configuration.
+          </div>`}
     </div>
   `;
 }

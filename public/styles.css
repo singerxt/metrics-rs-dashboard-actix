@@ -4,13 +4,41 @@ body {
 }
 
 .responsive-grid {
-  display: grid;
-  grid-template-columns: 1fr; /* Mobile default: 1 column */
-  gap: 1rem;
+    display: grid;
+    grid-template-columns: 1fr; /* Mobile default: 1 column */
+    gap: 1rem;
 }
 
 @media (min-width: 768px) {
-  .responsive-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)); /* Max 3 items in a row */
-  }
+    .responsive-grid {
+        grid-template-columns: repeat(
+            3,
+            minmax(0, 1fr)
+        ); /* Max 3 items in a row */
+    }
+}
+
+.error-chart {
+    background-color: rgba(255, 0, 0, 0.2);
+    border: 1px solid #ff4444;
+    border-radius: 4px;
+    color: #ff8888;
+    padding: 1rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 150px;
+}
+
+.empty-state {
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #aaa;
+    padding: 2rem;
+    text-align: center;
+    grid-column: 1 / -1;
+    margin: 2rem auto;
+    max-width: 500px;
 }

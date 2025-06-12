@@ -25,13 +25,26 @@ class MetricBuffer {
    * @returns {number} The calculated buffer size
    */
   calculateBufferSize(metrics) {
-    const uniqueLabels = new Set();
-    for (const sample of metrics) {
-      if (sample?.labels?.type) {
-        uniqueLabels.add(sample.labels.type);
-      }
+    if (!metrics || !Array.isArray(metrics)) {
+      return this.#bufferSize;
     }
-    return this.#bufferSize * (uniqueLabels.size || 1);
+
+    const uniqueLabels = new Set();
+    try {
+      for (const sample of metrics) {
+        if (sample?.labels?.type) {
+          uniqueLabels.add(sample.labels.type);
+        } else if (sample?.labels?.phase) {
+          uniqueLabels.add(sample.labels.phase);
+        } else if (sample?.labels?.pattern) {
+          uniqueLabels.add(sample.labels.pattern);
+        }
+      }
+      return this.#bufferSize * (uniqueLabels.size || 1);
+    } catch (error) {
+      console.warn("Error calculating buffer size", error);
+      return this.#bufferSize;
+    }
   }
 
   /**
@@ -43,30 +56,49 @@ class MetricBuffer {
    * @param {Array} metrics[].metrics - Array of metric data points
    */
   addMetrics(metrics) {
+    if (!metrics || !Array.isArray(metrics)) {
+      console.warn("Invalid metrics data provided to addMetrics");
+      return;
+    }
+
     for (const sample of metrics) {
-      if (sample) {
+      if (
+        !sample ||
+        !sample.name ||
+        !sample.metrics ||
+        !Array.isArray(sample.metrics)
+      ) {
+        console.warn("Invalid sample in metrics data", sample);
+        continue;
+      }
+
+      try {
+        // Add timestamp to each metric point
         for (const metric of sample.metrics) {
           if (metric) {
             metric.timestamp = Date.now();
           }
         }
-      }
 
-      const currentSample = this.#buffer.get(sample.name);
-      if (!currentSample) {
-        this.#buffer.set(sample.name, sample);
-        return;
-      }
+        const currentSample = this.#buffer.get(sample.name);
+        if (!currentSample) {
+          this.#buffer.set(sample.name, sample);
+          continue; // Changed from return to continue to process all samples
+        }
 
-      if (
-        currentSample.metrics.length >= this.calculateBufferSize(sample.metrics)
-      ) {
-        currentSample.metrics.shift();
-      }
+        if (
+          currentSample.metrics.length >=
+          this.calculateBufferSize(sample.metrics)
+        ) {
+          currentSample.metrics.shift();
+        }
 
-      const newMetrics = currentSample.metrics.concat(sample.metrics);
-      currentSample.metrics = newMetrics;
-      this.#buffer.set(sample.name, currentSample);
+        const newMetrics = currentSample.metrics.concat(sample.metrics);
+        currentSample.metrics = newMetrics;
+        this.#buffer.set(sample.name, currentSample);
+      } catch (error) {
+        console.error("Error adding metric sample:", error, sample);
+      }
     }
   }
 
@@ -104,7 +136,18 @@ class MetricBuffer {
    * @returns {Array} Array of all metric samples
    */
   getMetrics() {
-    return Array.from(this.#buffer.values());
+    try {
+      return Array.from(this.#buffer.values()).filter(
+        (sample) =>
+          sample &&
+          sample.name &&
+          sample.metrics &&
+          Array.isArray(sample.metrics),
+      );
+    } catch (error) {
+      console.error("Error retrieving metrics:", error);
+      return [];
+    }
   }
 }
 
