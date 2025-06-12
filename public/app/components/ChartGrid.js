@@ -9,6 +9,7 @@ import PrometheusImport from "../common/PrometheusImport.js";
 import CounterChart from "./CounterChart.js";
 import GaugeChart from "./GaugeChart.js";
 import HistogramChart from "./HistogramChart.js";
+import RateChart from "./RateChart.js";
 
 /**
  * Buffer for storing metric data with a default size of 10
@@ -28,6 +29,11 @@ const prometheusImporter = new PrometheusImport("./prometheus");
  * @returns {JSX.Element} The rendered chart component
  */
 const renderChart = (sample) => {
+  // Check if this is a rate metric (gauge with _rate_per_sec suffix)
+  if (sample.type === "GAUGE" && sample.name.endsWith("_rate_per_sec")) {
+    return html`<${RateChart} metricSample=${sample} />`;
+  }
+
   switch (sample.type) {
     case "COUNTER": {
       return html`<${CounterChart} metricSample=${sample} />`;

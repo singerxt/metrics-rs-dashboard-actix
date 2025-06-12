@@ -7,6 +7,7 @@
 //! ## Features
 //! - **Prometheus Integration**: Full support for collecting and exposing metrics in Prometheus format
 //! - **Interactive Dashboard**: Built-in web UI for visualizing metrics in real-time
+//! - **Rate Metrics**: Automatic calculation and tracking of per-second rates from counter values
 //! - **Customizable Histograms**: Fine-grained control over histogram bucket configuration
 //! - **Easy Integration**: Seamlessly integrates with Actix web applications via a simple API
 //! - **Thread-Safe**: Designed for concurrent access with proper synchronization
@@ -36,7 +37,14 @@ use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use metrics_util::layers::FanoutBuilder;
 use mime_guess::from_path;
 use rust_embed::Embed;
-use std::{collections::HashMap, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, OnceLock}};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 /// Global flag to track if metrics recorders have been configured
 static IS_CONFIGURED: AtomicBool = AtomicBool::new(false);
@@ -50,10 +58,63 @@ static PROMETHEUS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 /// by the dashboard to correctly display unit information in charts
 static UNITS_FOR_METRICS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
+/// Global storage for rate trackers
+///
+/// Maps counter names to their rate tracking instances
+static RATE_TRACKERS: OnceLock<Mutex<HashMap<String, RateTracker>>> = OnceLock::new();
+
 /// Embedded assets for the metrics dashboard
 #[derive(Embed)]
 #[folder = "public/"]
 struct Asset;
+
+/// Rate tracking utility for calculating per-second rates from counter values
+///
+/// This struct tracks the last value and timestamp of a counter to calculate
+/// the rate of change over time. It's used internally by the rate metric
+/// functionality to provide per-second rate calculations.
+#[derive(Debug, Clone)]
+pub struct RateTracker {
+    last_value: f64,
+    last_timestamp: Instant,
+}
+
+impl RateTracker {
+    /// Creates a new RateTracker with initial value and current timestamp
+    pub fn new() -> Self {
+        Self {
+            last_value: 0.0,
+            last_timestamp: Instant::now(),
+        }
+    }
+
+    /// Updates the tracker with a new value and calculates the rate
+    ///
+    /// # Arguments
+    /// * `new_value` - The new counter value
+    ///
+    /// # Returns
+    /// The calculated rate per second, or 0.0 if this is the first update
+    /// or if the time difference is too small to calculate a meaningful rate
+    pub fn update(&mut self, new_value: f64) -> f64 {
+        let now = Instant::now();
+        let time_diff = now.duration_since(self.last_timestamp);
+
+        // Avoid division by zero and very small time differences
+        if time_diff < Duration::from_millis(100) {
+            return 0.0;
+        }
+
+        let value_diff = new_value - self.last_value;
+        let rate = value_diff / time_diff.as_secs_f64();
+
+        self.last_value = new_value;
+        self.last_timestamp = now;
+
+        // Ensure we don't return negative rates for counters
+        rate.max(0.0)
+    }
+}
 
 /// Configuration options for the metrics dashboard
 #[derive(Debug, Clone, Default)]
@@ -130,27 +191,54 @@ impl HistogramFn for UnitRecorderHandle {
 }
 
 impl Recorder for UnitRecorder {
-    fn describe_counter(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, _description: metrics::SharedString) {
+    fn describe_counter(
+        &self,
+        key: metrics::KeyName,
+        unit: Option<metrics::Unit>,
+        _description: metrics::SharedString,
+    ) {
         self.register_unit(key, unit);
     }
 
-    fn describe_gauge(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, _description: metrics::SharedString) {
+    fn describe_gauge(
+        &self,
+        key: metrics::KeyName,
+        unit: Option<metrics::Unit>,
+        _description: metrics::SharedString,
+    ) {
         self.register_unit(key, unit);
     }
 
-    fn describe_histogram(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, _description: metrics::SharedString) {
+    fn describe_histogram(
+        &self,
+        key: metrics::KeyName,
+        unit: Option<metrics::Unit>,
+        _description: metrics::SharedString,
+    ) {
         self.register_unit(key, unit);
     }
 
-    fn register_counter(&self, key: &metrics::Key, _metadata: &metrics::Metadata<'_>) -> metrics::Counter {
+    fn register_counter(
+        &self,
+        key: &metrics::Key,
+        _metadata: &metrics::Metadata<'_>,
+    ) -> metrics::Counter {
         Counter::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
     }
 
-    fn register_gauge(&self, key: &metrics::Key, _metadata: &metrics::Metadata<'_>) -> metrics::Gauge {
+    fn register_gauge(
+        &self,
+        key: &metrics::Key,
+        _metadata: &metrics::Metadata<'_>,
+    ) -> metrics::Gauge {
         Gauge::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
     }
 
-    fn register_histogram(&self, key: &metrics::Key, _metadata: &metrics::Metadata<'_>) -> metrics::Histogram {
+    fn register_histogram(
+        &self,
+        key: &metrics::Key,
+        _metadata: &metrics::Metadata<'_>,
+    ) -> metrics::Histogram {
         Histogram::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
     }
 }
@@ -299,7 +387,10 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
     }
 
     // Try to be the first thread to configure
-    if IS_CONFIGURED.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+    if IS_CONFIGURED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         // Another thread configured the metrics in the meantime
         debug_once!("Another thread configured metrics. Skipping duplicate configuration.");
         return Ok(());
@@ -349,6 +440,106 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
     })?;
 
     Ok(())
+}
+
+/// Updates a rate tracker and returns the calculated rate
+///
+/// This function is used internally by the rate macros to calculate
+/// and track per-second rates from counter values.
+pub fn update_rate_tracker(_counter_name: &str, value: f64, tracker_key: String) -> f64 {
+    let rate_trackers = RATE_TRACKERS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut trackers) = rate_trackers.lock() {
+        let tracker = trackers.entry(tracker_key).or_insert_with(RateTracker::new);
+        tracker.update(value)
+    } else {
+        0.0
+    }
+}
+
+/// Macro for recording a counter with automatic rate tracking
+///
+/// This macro records both a counter value and its per-second rate.
+///
+/// # Example
+///
+/// ```rust
+/// use metrics_rs_dashboard_actix::counter_with_rate;
+///
+/// // Simple counter with rate
+/// counter_with_rate!("requests_total", 1.0);
+///
+/// // Counter with labels and rate
+/// counter_with_rate!("requests_total", 1.0, "endpoint", "/api/users");
+/// ```
+#[macro_export]
+macro_rules! counter_with_rate {
+    ($name:expr, $value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the counter
+        metrics::counter!($name).increment($value as u64);
+
+        // Calculate and record the rate
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_default", $name);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name).set(rate);
+    }};
+    ($name:expr, $value:expr, $label_key:expr, $label_value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the counter with labels
+        metrics::counter!($name, $label_key => $label_value).increment($value as u64);
+
+        // Calculate and record the rate with labels
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_{}_{}", $name, $label_key, $label_value);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name, $label_key => $label_value).set(rate);
+    }};
+}
+
+/// Macro for recording an absolute counter value with automatic rate tracking
+///
+/// This macro is similar to `counter_with_rate!` but sets the counter to an absolute value.
+///
+/// # Example
+///
+/// ```rust
+/// use metrics_rs_dashboard_actix::absolute_counter_with_rate;
+///
+/// // Simple absolute counter with rate
+/// absolute_counter_with_rate!("bytes_processed_total", 1024.0);
+///
+/// // Absolute counter with labels and rate
+/// absolute_counter_with_rate!("db_queries_total", 42.0, "type", "SELECT");
+/// ```
+#[macro_export]
+macro_rules! absolute_counter_with_rate {
+    ($name:expr, $value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the absolute counter
+        metrics::counter!($name).absolute($value as u64);
+
+        // Calculate and record the rate
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_default", $name);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name).set(rate);
+    }};
+    ($name:expr, $value:expr, $label_key:expr, $label_value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the absolute counter with labels
+        metrics::counter!($name, $label_key => $label_value).absolute($value as u64);
+
+        // Calculate and record the rate with labels
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_{}_{}", $name, $label_key, $label_value);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name, $label_key => $label_value).set(rate);
+    }};
 }
 
 /// Creates an Actix web scope for metrics endpoints
