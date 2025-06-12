@@ -1,6 +1,6 @@
 use actix_web::{App, HttpResponse, HttpServer, Responder, web};
 use log::info;
-use metrics::{Unit, describe_counter, describe_gauge};
+use metrics::{Unit, describe_counter};
 use metrics_exporter_prometheus::Matcher;
 use metrics_rs_dashboard_actix::{
     DashboardInput, absolute_counter_with_rate, counter_with_rate, create_metrics_actx_scope,
@@ -231,7 +231,7 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(hello))
             .service(metrics_actix_dashboard)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("127.0.0.1", 8081))?
     .run()
     .await
 }

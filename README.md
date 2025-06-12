@@ -10,6 +10,7 @@ A Rust library for integrating metrics and a visualization dashboard. This crate
 
 - Easy integration with any Rust application (Actix currently required for dashboard exposure only)
 - Real-time metrics visualization dashboard with unit-aware charts
+- **Rate metrics** - Automatic per-second rate calculation and tracking from counters
 - Prometheus metrics endpoint
 - Support for custom histogram buckets
 - Unit support for all metric types (displayed in charts)
@@ -41,8 +42,8 @@ cargo add metrics-rs-dashboard-actix
 
 ```rust
 use actix_web::{App, HttpServer};
-use metrics::{counter, histogram};
-use metrics_actix_dashboard::{create_metrics_actx_scope, DashboardInput};
+use metrics::{counter, histogram, describe_counter};
+use metrics_actix_dashboard::{create_metrics_actx_scope, DashboardInput, absolute_counter_with_rate};
 use metrics_exporter_prometheus::Matcher;
 
 #[actix_web::main]
@@ -54,6 +55,19 @@ async fn main() -> std::io::Result<()> {
             &[10.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0],
         )],
     };
+
+    // Example: Track requests with automatic rate calculation
+    tokio::spawn(async {
+        describe_counter!("http_requests_total", Unit::Count, "Total HTTP requests");
+        let mut request_count = 0u64;
+
+        loop {
+            request_count += 1;
+            // This creates both a counter and a rate gauge automatically
+            absolute_counter_with_rate!("http_requests_total", request_count as f64, "method", "GET");
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    });
 
     // Create your Actix web app with the metrics scope
     // Note: Actix is currently required only for exposing the dashboard and metrics endpoints
@@ -84,6 +98,63 @@ Note that while you can use the metrics collection functionality in any Rust app
 This library uses Actix Web solely for exposing the dashboard and metrics endpoints. You can use the metrics collection functionality in any Rust application, regardless of whether your main application uses Actix or not. However, at this moment, Actix Web is required to expose the dashboard and metrics API endpoints.
 
 Future versions may provide additional integration options for other web frameworks.
+
+## Rate Metrics
+
+This library provides automatic per-second rate calculation from counter values. Rate metrics are displayed as smooth area charts in the dashboard with teal coloring to distinguish them from regular gauges.
+
+### Using Rate Metrics
+
+Use the provided macros to automatically track both counter values and their rates:
+
+```rust
+use metrics_actix_dashboard::{counter_with_rate, absolute_counter_with_rate};
+use metrics::{describe_counter, Unit};
+
+// For incremental counters
+counter_with_rate!("requests_processed", 1.0); // Simple increment
+counter_with_rate!("requests_processed", 5.0, "endpoint", "/api/users"); // With labels
+
+// For absolute counter values (recommended for running totals)
+absolute_counter_with_rate!("bytes_sent_total", 1024.0); // Simple absolute value
+absolute_counter_with_rate!("bytes_sent_total", 2048.0, "interface", "eth0"); // With labels
+```
+
+### What Gets Created
+
+When you use rate macros, two metrics are automatically created:
+
+1. **Original Counter**: `requests_processed` (counter)
+2. **Rate Gauge**: `requests_processed_rate_per_sec` (gauge showing per-second rate)
+
+The rate metrics appear in the dashboard as separate charts with area visualization and appropriate rate units (e.g., "requests/sec", "bytes/sec").
+
+### Example: HTTP Request Rate Tracking
+
+```rust
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+let request_count = Arc::new(AtomicU64::new(0));
+
+tokio::spawn(async move {
+    describe_counter!("http_requests_total", Unit::Count, "Total HTTP requests");
+    
+    loop {
+        let current_total = request_count.fetch_add(1, Ordering::Relaxed) + 1;
+        
+        // Track both the running total and its rate
+        absolute_counter_with_rate!(
+            "http_requests_total", 
+            current_total as f64, 
+            "endpoint", 
+            "/api/users"
+        );
+        
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+});
+```
 
 ## Grouping Counter and Gauge metrics with Units
 
@@ -150,9 +221,28 @@ The following units are available for your metrics and will be displayed on char
 - `Unit::MebiBytes` - MiB (2^20 bytes)
 - `Unit::KibiBytes` - KiB (2^10 bytes)
 
+## Examples
+
+The repository includes comprehensive examples:
+
+- [`simple.rs`](examples/simple.rs) - Basic usage with counters, gauges, histograms, and rate metrics
+- [`rate_metrics.rs`](examples/rate_metrics.rs) - Advanced rate metrics examples with various scenarios
+
+Run the examples:
+
+```bash
+# Basic example with rate metrics
+cargo run --example simple
+
+# Advanced rate metrics example
+cargo run --example rate_metrics
+```
+
+Then visit `http://localhost:8080/metrics/dashboard` to see the interactive dashboard.
+
 ## Documentation
 
-For more examples and detailed documentation, check out the [example code](examples/simple.rs).
+For detailed API documentation, visit [docs.rs](https://docs.rs/metrics-rs-dashboard-actix).
 
 ## License
 

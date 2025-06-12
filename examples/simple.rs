@@ -119,7 +119,7 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(hello))
             .service(metrics_actix_dashboard)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("127.0.0.1", 8081))?
     .run()
     .await
 }
