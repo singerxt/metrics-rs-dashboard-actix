@@ -30,7 +30,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-metrics-rs-dashboard-actix = "0.1.3"
+metrics-rs-dashboard-actix = "0.1.5"
 ```
 
 or
@@ -140,18 +140,18 @@ let request_count = Arc::new(AtomicU64::new(0));
 
 tokio::spawn(async move {
     describe_counter!("http_requests_total", Unit::Count, "Total HTTP requests");
-    
+
     loop {
         let current_total = request_count.fetch_add(1, Ordering::Relaxed) + 1;
-        
+
         // Track both the running total and its rate
         absolute_counter_with_rate!(
-            "http_requests_total", 
-            current_total as f64, 
-            "endpoint", 
+            "http_requests_total",
+            current_total as f64,
+            "endpoint",
             "/api/users"
         );
-        
+
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 });
