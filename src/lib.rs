@@ -75,8 +75,9 @@ struct Asset;
 /// functionality to provide per-second rate calculations.
 #[derive(Debug, Clone)]
 pub struct RateTracker {
-    last_value: f64,
-    last_timestamp: Instant,
+    samples: Vec<(f64, Instant)>,
+    window_duration: Duration,
+    max_samples: usize,
 }
 
 impl Default for RateTracker {
@@ -86,11 +87,12 @@ impl Default for RateTracker {
 }
 
 impl RateTracker {
-    /// Creates a new RateTracker with initial value and current timestamp
+    /// Creates a new RateTracker with sliding window for high-frequency updates
     pub fn new() -> Self {
         Self {
-            last_value: 0.0,
-            last_timestamp: Instant::now(),
+            samples: Vec::new(),
+            window_duration: Duration::from_secs(2), // 2-second sliding window
+            max_samples: 200,                        // Limit memory usage
         }
     }
 
@@ -100,25 +102,42 @@ impl RateTracker {
     /// * `new_value` - The new counter value
     ///
     /// # Returns
-    /// The calculated rate per second, or 0.0 if this is the first update
-    /// or if the time difference is too small to calculate a meaningful rate
+    /// The calculated rate per second based on sliding window analysis
     pub fn update(&mut self, new_value: f64) -> f64 {
         let now = Instant::now();
-        let time_diff = now.duration_since(self.last_timestamp);
 
-        // Avoid division by zero and very small time differences
-        if time_diff < Duration::from_millis(100) {
+        // Add new sample
+        self.samples.push((new_value, now));
+
+        // Remove samples outside the window
+        let cutoff = now - self.window_duration;
+        self.samples.retain(|(_, timestamp)| *timestamp > cutoff);
+
+        // Limit samples to prevent unbounded growth
+        if self.samples.len() > self.max_samples {
+            let excess = self.samples.len() - self.max_samples;
+            self.samples.drain(0..excess);
+        }
+
+        // Need at least 2 samples to calculate rate
+        if self.samples.len() < 2 {
             return 0.0;
         }
 
-        let value_diff = new_value - self.last_value;
-        let rate = value_diff / time_diff.as_secs_f64();
+        // Calculate rate using oldest and newest samples in window
+        let (first_value, first_time) = self.samples[0];
+        let (last_value, last_time) = self.samples[self.samples.len() - 1];
 
-        self.last_value = new_value;
-        self.last_timestamp = now;
+        let time_diff = last_time.duration_since(first_time).as_secs_f64();
+
+        if time_diff <= 0.0 {
+            return 0.0;
+        }
+
+        let value_diff = last_value - first_value;
 
         // Ensure we don't return negative rates for counters
-        rate.max(0.0)
+        (value_diff / time_diff).max(0.0)
     }
 }
 
@@ -604,29 +623,29 @@ mod tests {
     #[test]
     fn test_rate_tracker_new() {
         let tracker = RateTracker::new();
-        assert_eq!(tracker.last_value, 0.0);
-        assert!(tracker.last_timestamp <= Instant::now());
+        assert!(tracker.samples.is_empty());
+        assert_eq!(tracker.window_duration, Duration::from_secs(2));
+        assert_eq!(tracker.max_samples, 200);
     }
 
     #[test]
     fn test_rate_tracker_default() {
         let tracker = RateTracker::default();
-        assert_eq!(tracker.last_value, 0.0);
-        assert!(tracker.last_timestamp <= Instant::now());
+        assert!(tracker.samples.is_empty());
+        assert_eq!(tracker.window_duration, Duration::from_secs(2));
+        assert_eq!(tracker.max_samples, 200);
     }
 
     #[test]
     fn test_rate_tracker_first_update() {
         let mut tracker = RateTracker::new();
 
-        // Sleep a bit to ensure time threshold is met
-        thread::sleep(Duration::from_millis(150));
-
         let rate = tracker.update(10.0);
 
-        // First update should calculate rate from 0.0 to 10.0 over time elapsed
-        assert!(rate > 0.0);
-        assert_eq!(tracker.last_value, 10.0);
+        // First update should return 0.0 (no previous sample)
+        assert_eq!(rate, 0.0);
+        assert_eq!(tracker.samples.len(), 1);
+        assert_eq!(tracker.samples[0].0, 10.0);
     }
 
     #[test]
@@ -637,54 +656,49 @@ mod tests {
         tracker.update(10.0);
 
         // Wait a bit to ensure time difference
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(20));
 
         // Second update
         let rate = tracker.update(20.0);
 
-        // Rate should be positive (10 units over ~0.2 seconds = ~50 units/sec)
+        // Rate should be positive (10 units over ~0.02 seconds = ~500 units/sec)
         assert!(rate > 0.0);
-        assert!(rate < 100.0); // Should be reasonable
-        assert_eq!(tracker.last_value, 20.0);
+        assert!(rate > 100.0); // Should be high due to short time interval
+        assert_eq!(tracker.samples.len(), 2);
     }
 
     #[test]
     fn test_rate_tracker_negative_rate_clamping() {
         let mut tracker = RateTracker::new();
 
-        // Sleep to ensure time threshold
-        thread::sleep(Duration::from_millis(150));
-
         // First update with higher value
         tracker.update(20.0);
 
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(20));
 
         // Second update with lower value (would normally give negative rate)
         let rate = tracker.update(10.0);
 
         // Rate should be clamped to 0.0 for counters (negative rates become 0.0)
         assert_eq!(rate, 0.0);
-        assert_eq!(tracker.last_value, 10.0);
+        assert_eq!(tracker.samples.len(), 2);
+        assert_eq!(tracker.samples[1].0, 10.0);
     }
 
     #[test]
-    fn test_rate_tracker_too_fast_updates() {
+    fn test_rate_tracker_high_frequency_updates() {
         let mut tracker = RateTracker::new();
-
-        // Sleep to ensure first update meets threshold
-        thread::sleep(Duration::from_millis(150));
 
         // First update
         tracker.update(10.0);
 
-        // Immediate second update (less than 100ms threshold)
+        // Immediate second update (now handles high frequency)
         let rate = tracker.update(20.0);
 
-        // Should return 0.0 due to time threshold
-        assert_eq!(rate, 0.0);
-        // Value should remain the same when time threshold isn't met
-        assert_eq!(tracker.last_value, 10.0);
+        // Should calculate rate even for very fast updates
+        assert!(rate >= 0.0);
+        assert_eq!(tracker.samples.len(), 2);
+        assert_eq!(tracker.samples[1].0, 20.0);
     }
 
     #[test]
@@ -822,45 +836,49 @@ mod tests {
 
         thread::sleep(Duration::from_millis(150));
 
-        // Update with zero value
+        // Update with 0.0 value
         let rate = tracker.update(0.0);
 
-        // Should return 0.0 rate (no change from initial 0.0)
+        // Should return 0.0 rate (first update)
         assert_eq!(rate, 0.0);
-        assert_eq!(tracker.last_value, 0.0);
+        assert_eq!(tracker.samples.len(), 1);
+        assert_eq!(tracker.samples[0].0, 0.0);
     }
 
     #[test]
     fn test_rate_tracker_large_values() {
         let mut tracker = RateTracker::new();
 
-        thread::sleep(Duration::from_millis(150));
+        // First update
+        tracker.update(500_000.0);
+
+        thread::sleep(Duration::from_millis(20));
 
         // Test with large values
         let large_value = 1_000_000.0;
         let rate = tracker.update(large_value);
 
         assert!(rate > 0.0);
-        assert_eq!(tracker.last_value, large_value);
+        assert_eq!(tracker.samples.len(), 2);
+        assert_eq!(tracker.samples[1].0, large_value);
     }
 
     #[test]
     fn test_rate_tracker_fractional_values() {
         let mut tracker = RateTracker::new();
 
-        thread::sleep(Duration::from_millis(150));
-
         // First update with fractional value
         tracker.update(1.5);
 
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(20));
 
         // Second update with another fractional value
         let rate = tracker.update(3.7);
 
         // Should handle fractional values correctly
         assert!(rate > 0.0);
-        assert_eq!(tracker.last_value, 3.7);
+        assert_eq!(tracker.samples.len(), 2);
+        assert_eq!(tracker.samples[1].0, 3.7);
     }
 
     #[test]
@@ -892,13 +910,15 @@ mod tests {
     #[test]
     fn test_rate_tracker_consistent_timestamps() {
         let mut tracker = RateTracker::new();
-        let initial_timestamp = tracker.last_timestamp;
 
-        thread::sleep(Duration::from_millis(150));
+        let start_time = std::time::Instant::now();
 
-        tracker.update(10.0);
+        thread::sleep(Duration::from_millis(20));
 
-        // Timestamp should have been updated
-        assert!(tracker.last_timestamp > initial_timestamp);
+        tracker.update(5.0);
+
+        // Check that the sample was recorded with a reasonable timestamp
+        assert_eq!(tracker.samples.len(), 1);
+        assert!(tracker.samples[0].1 > start_time);
     }
 }
