@@ -1,6 +1,6 @@
 [package]
 name = "metrics-rs-dashboard-actix"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "Metrics dashboard for Rust applications"
 license = "MIT"

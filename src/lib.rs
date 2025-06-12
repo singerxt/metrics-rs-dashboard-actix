@@ -7,6 +7,7 @@
 //! ## Features
 //! - **Prometheus Integration**: Full support for collecting and exposing metrics in Prometheus format
 //! - **Interactive Dashboard**: Built-in web UI for visualizing metrics in real-time
+//! - **Rate Metrics**: Automatic calculation and tracking of per-second rates from counter values
 //! - **Customizable Histograms**: Fine-grained control over histogram bucket configuration
 //! - **Easy Integration**: Seamlessly integrates with Actix web applications via a simple API
 //! - **Thread-Safe**: Designed for concurrent access with proper synchronization
@@ -36,7 +37,14 @@ use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use metrics_util::layers::FanoutBuilder;
 use mime_guess::from_path;
 use rust_embed::Embed;
-use std::{collections::HashMap, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, OnceLock}};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 /// Global flag to track if metrics recorders have been configured
 static IS_CONFIGURED: AtomicBool = AtomicBool::new(false);
@@ -50,10 +58,69 @@ static PROMETHEUS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 /// by the dashboard to correctly display unit information in charts
 static UNITS_FOR_METRICS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
+/// Global storage for rate trackers
+///
+/// Maps counter names to their rate tracking instances
+static RATE_TRACKERS: OnceLock<Mutex<HashMap<String, RateTracker>>> = OnceLock::new();
+
 /// Embedded assets for the metrics dashboard
 #[derive(Embed)]
 #[folder = "public/"]
 struct Asset;
+
+/// Rate tracking utility for calculating per-second rates from counter values
+///
+/// This struct tracks the last value and timestamp of a counter to calculate
+/// the rate of change over time. It's used internally by the rate metric
+/// functionality to provide per-second rate calculations.
+#[derive(Debug, Clone)]
+pub struct RateTracker {
+    last_value: f64,
+    last_timestamp: Instant,
+}
+
+impl Default for RateTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RateTracker {
+    /// Creates a new RateTracker with initial value and current timestamp
+    pub fn new() -> Self {
+        Self {
+            last_value: 0.0,
+            last_timestamp: Instant::now(),
+        }
+    }
+
+    /// Updates the tracker with a new value and calculates the rate
+    ///
+    /// # Arguments
+    /// * `new_value` - The new counter value
+    ///
+    /// # Returns
+    /// The calculated rate per second, or 0.0 if this is the first update
+    /// or if the time difference is too small to calculate a meaningful rate
+    pub fn update(&mut self, new_value: f64) -> f64 {
+        let now = Instant::now();
+        let time_diff = now.duration_since(self.last_timestamp);
+
+        // Avoid division by zero and very small time differences
+        if time_diff < Duration::from_millis(100) {
+            return 0.0;
+        }
+
+        let value_diff = new_value - self.last_value;
+        let rate = value_diff / time_diff.as_secs_f64();
+
+        self.last_value = new_value;
+        self.last_timestamp = now;
+
+        // Ensure we don't return negative rates for counters
+        rate.max(0.0)
+    }
+}
 
 /// Configuration options for the metrics dashboard
 #[derive(Debug, Clone, Default)]
@@ -130,27 +197,54 @@ impl HistogramFn for UnitRecorderHandle {
 }
 
 impl Recorder for UnitRecorder {
-    fn describe_counter(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, _description: metrics::SharedString) {
+    fn describe_counter(
+        &self,
+        key: metrics::KeyName,
+        unit: Option<metrics::Unit>,
+        _description: metrics::SharedString,
+    ) {
         self.register_unit(key, unit);
     }
 
-    fn describe_gauge(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, _description: metrics::SharedString) {
+    fn describe_gauge(
+        &self,
+        key: metrics::KeyName,
+        unit: Option<metrics::Unit>,
+        _description: metrics::SharedString,
+    ) {
         self.register_unit(key, unit);
     }
 
-    fn describe_histogram(&self, key: metrics::KeyName, unit: Option<metrics::Unit>, _description: metrics::SharedString) {
+    fn describe_histogram(
+        &self,
+        key: metrics::KeyName,
+        unit: Option<metrics::Unit>,
+        _description: metrics::SharedString,
+    ) {
         self.register_unit(key, unit);
     }
 
-    fn register_counter(&self, key: &metrics::Key, _metadata: &metrics::Metadata<'_>) -> metrics::Counter {
+    fn register_counter(
+        &self,
+        key: &metrics::Key,
+        _metadata: &metrics::Metadata<'_>,
+    ) -> metrics::Counter {
         Counter::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
     }
 
-    fn register_gauge(&self, key: &metrics::Key, _metadata: &metrics::Metadata<'_>) -> metrics::Gauge {
+    fn register_gauge(
+        &self,
+        key: &metrics::Key,
+        _metadata: &metrics::Metadata<'_>,
+    ) -> metrics::Gauge {
         Gauge::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
     }
 
-    fn register_histogram(&self, key: &metrics::Key, _metadata: &metrics::Metadata<'_>) -> metrics::Histogram {
+    fn register_histogram(
+        &self,
+        key: &metrics::Key,
+        _metadata: &metrics::Metadata<'_>,
+    ) -> metrics::Histogram {
         Histogram::from_arc(Arc::new(UnitRecorderHandle(key.clone())))
     }
 }
@@ -299,7 +393,10 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
     }
 
     // Try to be the first thread to configure
-    if IS_CONFIGURED.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+    if IS_CONFIGURED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         // Another thread configured the metrics in the meantime
         debug_once!("Another thread configured metrics. Skipping duplicate configuration.");
         return Ok(());
@@ -351,6 +448,106 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
     Ok(())
 }
 
+/// Updates a rate tracker and returns the calculated rate
+///
+/// This function is used internally by the rate macros to calculate
+/// and track per-second rates from counter values.
+pub fn update_rate_tracker(_counter_name: &str, value: f64, tracker_key: String) -> f64 {
+    let rate_trackers = RATE_TRACKERS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut trackers) = rate_trackers.lock() {
+        let tracker = trackers.entry(tracker_key).or_insert_with(RateTracker::new);
+        tracker.update(value)
+    } else {
+        0.0
+    }
+}
+
+/// Macro for recording a counter with automatic rate tracking
+///
+/// This macro records both a counter value and its per-second rate.
+///
+/// # Example
+///
+/// ```rust
+/// use metrics_rs_dashboard_actix::counter_with_rate;
+///
+/// // Simple counter with rate
+/// counter_with_rate!("requests_total", 1.0);
+///
+/// // Counter with labels and rate
+/// counter_with_rate!("requests_total", 1.0, "endpoint", "/api/users");
+/// ```
+#[macro_export]
+macro_rules! counter_with_rate {
+    ($name:expr, $value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the counter
+        metrics::counter!($name).increment($value as u64);
+
+        // Calculate and record the rate
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_default", $name);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name).set(rate);
+    }};
+    ($name:expr, $value:expr, $label_key:expr, $label_value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the counter with labels
+        metrics::counter!($name, $label_key => $label_value).increment($value as u64);
+
+        // Calculate and record the rate with labels
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_{}_{}", $name, $label_key, $label_value);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name, $label_key => $label_value).set(rate);
+    }};
+}
+
+/// Macro for recording an absolute counter value with automatic rate tracking
+///
+/// This macro is similar to `counter_with_rate!` but sets the counter to an absolute value.
+///
+/// # Example
+///
+/// ```rust
+/// use metrics_rs_dashboard_actix::absolute_counter_with_rate;
+///
+/// // Simple absolute counter with rate
+/// absolute_counter_with_rate!("bytes_processed_total", 1024.0);
+///
+/// // Absolute counter with labels and rate
+/// absolute_counter_with_rate!("db_queries_total", 42.0, "type", "SELECT");
+/// ```
+#[macro_export]
+macro_rules! absolute_counter_with_rate {
+    ($name:expr, $value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the absolute counter
+        metrics::counter!($name).absolute($value as u64);
+
+        // Calculate and record the rate
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_default", $name);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name).set(rate);
+    }};
+    ($name:expr, $value:expr, $label_key:expr, $label_value:expr) => {{
+        use $crate::update_rate_tracker;
+
+        // Record the absolute counter with labels
+        metrics::counter!($name, $label_key => $label_value).absolute($value as u64);
+
+        // Calculate and record the rate with labels
+        let rate_name = format!("{}_rate_per_sec", $name);
+        let tracker_key = format!("{}_{}_{}", $name, $label_key, $label_value);
+        let rate = update_rate_tracker($name, $value, tracker_key);
+        metrics::gauge!(rate_name, $label_key => $label_value).set(rate);
+    }};
+}
+
 /// Creates an Actix web scope for metrics endpoints
 ///
 /// This function configures metrics recorders and creates a scope with
@@ -375,7 +572,7 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
 ///
 /// ```rust,no_run
 /// use actix_web::{App, HttpServer};
-/// use your_crate::metrics::{create_metrics_actx_scope, DashboardInput};
+/// use metrics_rs_dashboard_actix::{create_metrics_actx_scope, DashboardInput};
 ///
 /// #[actix_web::main]
 /// async fn main() -> std::io::Result<()> {
@@ -396,4 +593,312 @@ pub fn create_metrics_actx_scope(input: &DashboardInput) -> Result<Scope> {
         .service(get_dashboard)
         .service(get_dashboard_assets);
     Ok(scope)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn test_rate_tracker_new() {
+        let tracker = RateTracker::new();
+        assert_eq!(tracker.last_value, 0.0);
+        assert!(tracker.last_timestamp <= Instant::now());
+    }
+
+    #[test]
+    fn test_rate_tracker_default() {
+        let tracker = RateTracker::default();
+        assert_eq!(tracker.last_value, 0.0);
+        assert!(tracker.last_timestamp <= Instant::now());
+    }
+
+    #[test]
+    fn test_rate_tracker_first_update() {
+        let mut tracker = RateTracker::new();
+
+        // Sleep a bit to ensure time threshold is met
+        thread::sleep(Duration::from_millis(150));
+
+        let rate = tracker.update(10.0);
+
+        // First update should calculate rate from 0.0 to 10.0 over time elapsed
+        assert!(rate > 0.0);
+        assert_eq!(tracker.last_value, 10.0);
+    }
+
+    #[test]
+    fn test_rate_tracker_subsequent_updates() {
+        let mut tracker = RateTracker::new();
+
+        // First update
+        tracker.update(10.0);
+
+        // Wait a bit to ensure time difference
+        thread::sleep(Duration::from_millis(200));
+
+        // Second update
+        let rate = tracker.update(20.0);
+
+        // Rate should be positive (10 units over ~0.2 seconds = ~50 units/sec)
+        assert!(rate > 0.0);
+        assert!(rate < 100.0); // Should be reasonable
+        assert_eq!(tracker.last_value, 20.0);
+    }
+
+    #[test]
+    fn test_rate_tracker_negative_rate_clamping() {
+        let mut tracker = RateTracker::new();
+
+        // Sleep to ensure time threshold
+        thread::sleep(Duration::from_millis(150));
+
+        // First update with higher value
+        tracker.update(20.0);
+
+        thread::sleep(Duration::from_millis(200));
+
+        // Second update with lower value (would normally give negative rate)
+        let rate = tracker.update(10.0);
+
+        // Rate should be clamped to 0.0 for counters (negative rates become 0.0)
+        assert_eq!(rate, 0.0);
+        assert_eq!(tracker.last_value, 10.0);
+    }
+
+    #[test]
+    fn test_rate_tracker_too_fast_updates() {
+        let mut tracker = RateTracker::new();
+
+        // Sleep to ensure first update meets threshold
+        thread::sleep(Duration::from_millis(150));
+
+        // First update
+        tracker.update(10.0);
+
+        // Immediate second update (less than 100ms threshold)
+        let rate = tracker.update(20.0);
+
+        // Should return 0.0 due to time threshold
+        assert_eq!(rate, 0.0);
+        // Value should remain the same when time threshold isn't met
+        assert_eq!(tracker.last_value, 10.0);
+    }
+
+    #[test]
+    fn test_update_rate_tracker_function() {
+        let tracker_key = "test_metric_default".to_string();
+
+        // First call
+        let rate1 = update_rate_tracker("test_metric", 10.0, tracker_key.clone());
+        assert_eq!(rate1, 0.0); // First call should return 0
+
+        thread::sleep(Duration::from_millis(200));
+
+        // Second call
+        let rate2 = update_rate_tracker("test_metric", 20.0, tracker_key);
+        assert!(rate2 >= 0.0); // Should return a valid rate
+    }
+
+    #[test]
+    fn test_counter_with_rate_macro_simple() {
+        // This test verifies the macro compiles and doesn't panic
+        // We can't easily test the actual metric recording without setting up the full recorder
+        let result = std::panic::catch_unwind(|| {
+            counter_with_rate!("test_counter", 1.0);
+        });
+
+        // The macro should complete without panicking
+        // Note: In a real test environment, you'd verify the metrics were actually recorded
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_counter_with_rate_macro_with_labels() {
+        // This test verifies the macro with labels compiles and doesn't panic
+        let result = std::panic::catch_unwind(|| {
+            counter_with_rate!("test_counter_labeled", 2.0, "service", "api");
+        });
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_absolute_counter_with_rate_macro_simple() {
+        // This test verifies the macro compiles and doesn't panic
+        let result = std::panic::catch_unwind(|| {
+            absolute_counter_with_rate!("test_absolute_counter", 42.0);
+        });
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_absolute_counter_with_rate_macro_with_labels() {
+        // This test verifies the macro with labels compiles and doesn't panic
+        let result = std::panic::catch_unwind(|| {
+            absolute_counter_with_rate!("test_absolute_counter_labeled", 100.0, "type", "batch");
+        });
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rate_calculation_accuracy() {
+        let mut tracker = RateTracker::new();
+
+        // Set initial value
+        tracker.update(0.0);
+
+        // Wait exactly 1 second
+        thread::sleep(Duration::from_secs(1));
+
+        // Add 10 units after 1 second
+        let rate = tracker.update(10.0);
+
+        // Rate should be approximately 10 units/second
+        assert!(
+            (rate - 10.0).abs() < 1.0,
+            "Rate {} should be close to 10.0",
+            rate
+        );
+    }
+
+    #[test]
+    fn test_multiple_rate_tracker_instances() {
+        let key1 = "metric1_default".to_string();
+        let key2 = "metric2_default".to_string();
+
+        // Test that different tracker keys maintain separate state
+        update_rate_tracker("metric1", 10.0, key1.clone());
+        update_rate_tracker("metric2", 20.0, key2.clone());
+
+        thread::sleep(Duration::from_millis(200));
+
+        let rate1 = update_rate_tracker("metric1", 15.0, key1);
+        let rate2 = update_rate_tracker("metric2", 30.0, key2);
+
+        // Both should return valid rates
+        assert!(rate1 >= 0.0);
+        assert!(rate2 >= 0.0);
+
+        // Rates should be different since the value changes are different
+        // (5 units vs 10 units over the same time period)
+        if rate1 > 0.0 && rate2 > 0.0 {
+            assert!(
+                (rate2 / rate1 - 2.0).abs() < 0.5,
+                "Rate2 ({}) should be approximately twice rate1 ({})",
+                rate2,
+                rate1
+            );
+        }
+    }
+
+    #[test]
+    fn test_dashboard_input_default() {
+        let input = DashboardInput::default();
+        assert!(input.buckets_for_metrics.is_empty());
+    }
+
+    #[test]
+    fn test_dashboard_input_with_buckets() {
+        let buckets = &[1.0, 5.0, 10.0];
+        let input = DashboardInput {
+            buckets_for_metrics: vec![(
+                metrics_exporter_prometheus::Matcher::Full("test_metric".to_string()),
+                buckets,
+            )],
+        };
+
+        assert_eq!(input.buckets_for_metrics.len(), 1);
+        assert_eq!(input.buckets_for_metrics[0].1, buckets);
+    }
+
+    #[test]
+    fn test_rate_tracker_zero_value_update() {
+        let mut tracker = RateTracker::new();
+
+        thread::sleep(Duration::from_millis(150));
+
+        // Update with zero value
+        let rate = tracker.update(0.0);
+
+        // Should return 0.0 rate (no change from initial 0.0)
+        assert_eq!(rate, 0.0);
+        assert_eq!(tracker.last_value, 0.0);
+    }
+
+    #[test]
+    fn test_rate_tracker_large_values() {
+        let mut tracker = RateTracker::new();
+
+        thread::sleep(Duration::from_millis(150));
+
+        // Test with large values
+        let large_value = 1_000_000.0;
+        let rate = tracker.update(large_value);
+
+        assert!(rate > 0.0);
+        assert_eq!(tracker.last_value, large_value);
+    }
+
+    #[test]
+    fn test_rate_tracker_fractional_values() {
+        let mut tracker = RateTracker::new();
+
+        thread::sleep(Duration::from_millis(150));
+
+        // First update with fractional value
+        tracker.update(1.5);
+
+        thread::sleep(Duration::from_millis(200));
+
+        // Second update with another fractional value
+        let rate = tracker.update(3.7);
+
+        // Should handle fractional values correctly
+        assert!(rate > 0.0);
+        assert_eq!(tracker.last_value, 3.7);
+    }
+
+    #[test]
+    fn test_update_rate_tracker_concurrent_access() {
+        use std::thread;
+
+        let handles: Vec<_> = (0..5)
+            .map(|i| {
+                thread::spawn(move || {
+                    let tracker_key = format!("concurrent_test_{}", i);
+
+                    // Each thread updates its own tracker
+                    update_rate_tracker("concurrent_metric", 10.0, tracker_key.clone());
+
+                    thread::sleep(Duration::from_millis(200));
+
+                    update_rate_tracker("concurrent_metric", 20.0, tracker_key)
+                })
+            })
+            .collect();
+
+        // Wait for all threads to complete
+        for handle in handles {
+            let rate = handle.join().expect("Thread should complete successfully");
+            assert!(rate >= 0.0);
+        }
+    }
+
+    #[test]
+    fn test_rate_tracker_consistent_timestamps() {
+        let mut tracker = RateTracker::new();
+        let initial_timestamp = tracker.last_timestamp;
+
+        thread::sleep(Duration::from_millis(150));
+
+        tracker.update(10.0);
+
+        // Timestamp should have been updated
+        assert!(tracker.last_timestamp > initial_timestamp);
+    }
 }
