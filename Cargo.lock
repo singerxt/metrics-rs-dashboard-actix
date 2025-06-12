@@ -1367,12 +1367,13 @@ dependencies = [
 
 [[package]]
 name = "metrics-rs-dashboard-actix"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "actix-web",
  "anyhow",
  "chrono",
  "env_logger",
+ "lazy_static",
  "log",
  "log-once",
  "metrics",
