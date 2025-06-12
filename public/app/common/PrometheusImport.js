@@ -24,11 +24,19 @@ class PrometheusImport {
     }
     const text = await response.text();
     const header = response.headers.get("x-dashboard-metrics-unit");
-    const units = JSON.parse(header);
+    let units = {};
+    try {
+      if (header) {
+        units = JSON.parse(header);
+      }
+    } catch (error) {
+      console.warn("Failed to parse metrics units header:", error);
+    }
+
     const promJson = parsePrometheusTextFormat(text);
 
     for (const sample of promJson) {
-      sample.unit = units[sample.name] || "count";
+      sample.unit = units && units[sample.name] ? units[sample.name] : "count";
     }
 
     return promJson;

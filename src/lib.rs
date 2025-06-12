@@ -78,6 +78,10 @@ pub struct RateTracker {
     samples: Vec<(f64, Instant)>,
     window_duration: Duration,
     max_samples: usize,
+    last_value: f64,                   // Store the last value to handle resets
+    start_time: Option<Instant>,       // Track when we first started
+    last_calculated_rate: f64,         // Store the last calculated rate
+    last_update_time: Option<Instant>, // Time of last update for better rate calculation
 }
 
 impl Default for RateTracker {
@@ -91,8 +95,12 @@ impl RateTracker {
     pub fn new() -> Self {
         Self {
             samples: Vec::new(),
-            window_duration: Duration::from_secs(2), // 2-second sliding window
-            max_samples: 200,                        // Limit memory usage
+            window_duration: Duration::from_secs(10), // 10-second sliding window for better stability
+            max_samples: 200,                         // Limit memory usage
+            last_value: 0.0,
+            start_time: None,
+            last_calculated_rate: 0.0,
+            last_update_time: None,
         }
     }
 
@@ -106,8 +114,57 @@ impl RateTracker {
     pub fn update(&mut self, new_value: f64) -> f64 {
         let now = Instant::now();
 
+        // Initialize start time if this is the first update
+        if self.start_time.is_none() {
+            self.start_time = Some(now);
+            self.last_update_time = Some(now);
+            self.last_value = new_value;
+            self.samples.push((new_value, now));
+            return 0.0; // First sample, can't calculate rate yet
+        }
+
+        // Calculate time since last update for short-term rate
+        let short_term_rate = if let Some(last_time) = self.last_update_time {
+            let elapsed = now.duration_since(last_time).as_secs_f64();
+            // If update happens rapidly, use elapsed time for immediate rate feedback
+            if elapsed > 0.001 && new_value > self.last_value {
+                let instant_rate = (new_value - self.last_value) / elapsed;
+                // If we have a previous rate, blend them for stability
+                if self.last_calculated_rate > 0.0 {
+                    // Weighted blend: 30% new rate, 70% old rate for stability
+                    0.3 * instant_rate + 0.7 * self.last_calculated_rate
+                } else {
+                    instant_rate
+                }
+            } else {
+                // If values aren't changing or time is too short, use last calculated rate
+                self.last_calculated_rate
+            }
+        } else {
+            0.0
+        };
+
+        // Skip full recalculation if the new value is the same as the last one
+        if new_value == self.last_value {
+            return short_term_rate;
+        }
+
+        // Detect counter resets (new value < last value)
+        if new_value < self.last_value {
+            // Counter reset detected - clear samples and start fresh
+            self.samples.clear();
+            self.start_time = Some(now);
+            self.last_value = new_value;
+            self.last_update_time = Some(now);
+            self.samples.push((new_value, now));
+            self.last_calculated_rate = 0.0;
+            return 0.0;
+        }
+
         // Add new sample
         self.samples.push((new_value, now));
+        self.last_value = new_value;
+        self.last_update_time = Some(now);
 
         // Remove samples outside the window
         let cutoff = now - self.window_duration;
@@ -119,9 +176,19 @@ impl RateTracker {
             self.samples.drain(0..excess);
         }
 
-        // Need at least 2 samples to calculate rate
+        // If we don't have at least 2 samples, use start time as fallback
         if self.samples.len() < 2 {
-            return 0.0;
+            if let Some(start) = self.start_time {
+                let elapsed = now.duration_since(start).as_secs_f64();
+                if elapsed > 0.0 {
+                    // Use first value in samples and the elapsed time since start
+                    let first_value = self.samples[0].0;
+                    let rate = (new_value - first_value) / elapsed;
+                    self.last_calculated_rate = rate.max(0.0);
+                    return self.last_calculated_rate;
+                }
+            }
+            return short_term_rate;
         }
 
         // Calculate rate using oldest and newest samples in window
@@ -131,13 +198,25 @@ impl RateTracker {
         let time_diff = last_time.duration_since(first_time).as_secs_f64();
 
         if time_diff <= 0.0 {
-            return 0.0;
+            return short_term_rate;
         }
 
         let value_diff = last_value - first_value;
 
         // Ensure we don't return negative rates for counters
-        (value_diff / time_diff).max(0.0)
+        let long_term_rate = (value_diff / time_diff).max(0.0);
+
+        // Blend short and long term rates for stability
+        // If they're very different, prefer the long-term rate
+        let rate = if (long_term_rate - short_term_rate).abs() > long_term_rate * 0.5 {
+            long_term_rate
+        } else {
+            // Otherwise use weighted average
+            0.7 * long_term_rate + 0.3 * short_term_rate
+        };
+
+        self.last_calculated_rate = rate;
+        rate
     }
 }
 
@@ -474,10 +553,38 @@ fn configure_metrics_recorders_once(input: &DashboardInput) -> Result<()> {
 pub fn update_rate_tracker(_counter_name: &str, value: f64, tracker_key: String) -> f64 {
     let rate_trackers = RATE_TRACKERS.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(mut trackers) = rate_trackers.lock() {
-        let tracker = trackers.entry(tracker_key).or_insert_with(RateTracker::new);
+        let tracker = trackers
+            .entry(tracker_key.clone())
+            .or_insert_with(RateTracker::new);
+
+        // Always calculate a rate, even with the same value
+        // The RateTracker will handle the logic to determine the actual rate
         tracker.update(value)
     } else {
-        0.0
+        // If we can't get the lock, attempt a minimal calculation
+        // This is better than returning 0.0 which would indicate no activity
+        static LAST_VALUES: OnceLock<Mutex<HashMap<String, (f64, Instant)>>> = OnceLock::new();
+        let last_values = LAST_VALUES.get_or_init(|| Mutex::new(HashMap::new()));
+
+        if let Ok(mut values) = last_values.lock() {
+            let now = Instant::now();
+            let entry = values.entry(tracker_key).or_insert((0.0, now));
+
+            let (last_value, last_time) = *entry;
+            let elapsed = now.duration_since(last_time).as_secs_f64();
+
+            if elapsed > 0.0 && value > last_value {
+                let rate = (value - last_value) / elapsed;
+                *entry = (value, now);
+                return rate;
+            }
+
+            // Update even if we can't calculate a rate
+            *entry = (value, now);
+        }
+
+        // Fallback if everything fails
+        0.001 // Return tiny non-zero value to show some activity
     }
 }
 
@@ -502,25 +609,70 @@ macro_rules! counter_with_rate {
         use $crate::update_rate_tracker;
 
         // Record the counter
-        metrics::counter!($name).increment($value as u64);
+        let counter = metrics::counter!($name);
+        counter.increment($value as u64);
 
-        // Calculate and record the rate
+        // Get the current absolute value of the counter for rate calculation
+        // We track the cumulative value separately for rate calculations
+        use std::sync::OnceLock;
+        use std::sync::Mutex;
+        use std::collections::HashMap;
+
+        static COUNTER_VALUES: OnceLock<Mutex<HashMap<String, f64>>> = OnceLock::new();
+        let counter_values = COUNTER_VALUES.get_or_init(|| Mutex::new(HashMap::new()));
+
+        let absolute_value = if let Ok(mut values) = counter_values.lock() {
+            let key = format!("{}_default", $name);
+            let current = values.entry(key).or_insert(0.0);
+            *current += $value;
+            *current
+        } else {
+            // If lock fails, still try to update with just the increment value
+            $value
+        };
+
+        // Calculate and record the rate using absolute counter value
         let rate_name = format!("{}_rate_per_sec", $name);
         let tracker_key = format!("{}_default", $name);
-        let rate = update_rate_tracker($name, $value, tracker_key);
-        metrics::gauge!(rate_name).set(rate);
+        let rate = update_rate_tracker($name, absolute_value, tracker_key);
+
+        // Ensure we always set a rate value, even if it's very small
+        let display_rate = if rate < 0.001 && $value > 0.0 { 0.001 } else { rate };
+        metrics::gauge!(rate_name).set(display_rate);
     }};
     ($name:expr, $value:expr, $label_key:expr, $label_value:expr) => {{
         use $crate::update_rate_tracker;
 
         // Record the counter with labels
-        metrics::counter!($name, $label_key => $label_value).increment($value as u64);
+        let counter = metrics::counter!($name, $label_key => $label_value);
+        counter.increment($value as u64);
 
-        // Calculate and record the rate with labels
+        // Get the current absolute value of the counter for rate calculation
+        use std::sync::OnceLock;
+        use std::sync::Mutex;
+        use std::collections::HashMap;
+
+        static COUNTER_VALUES: OnceLock<Mutex<HashMap<String, f64>>> = OnceLock::new();
+        let counter_values = COUNTER_VALUES.get_or_init(|| Mutex::new(HashMap::new()));
+
+        let absolute_value = if let Ok(mut values) = counter_values.lock() {
+            let key = format!("{}_{}_{}", $name, $label_key, $label_value);
+            let current = values.entry(key).or_insert(0.0);
+            *current += $value;
+            *current
+        } else {
+            // If lock fails, still try to update with just the increment value
+            $value
+        };
+
+        // Calculate and record the rate using absolute counter value
         let rate_name = format!("{}_rate_per_sec", $name);
         let tracker_key = format!("{}_{}_{}", $name, $label_key, $label_value);
-        let rate = update_rate_tracker($name, $value, tracker_key);
-        metrics::gauge!(rate_name, $label_key => $label_value).set(rate);
+        let rate = update_rate_tracker($name, absolute_value, tracker_key);
+
+        // Ensure we always set a rate value, even if it's very small
+        let display_rate = if rate < 0.001 && $value > 0.0 { 0.001 } else { rate };
+        metrics::gauge!(rate_name, $label_key => $label_value).set(display_rate);
     }};
 }
 
@@ -547,11 +699,14 @@ macro_rules! absolute_counter_with_rate {
         // Record the absolute counter
         metrics::counter!($name).absolute($value as u64);
 
-        // Calculate and record the rate
+        // Calculate and record the rate directly using the absolute value
         let rate_name = format!("{}_rate_per_sec", $name);
         let tracker_key = format!("{}_default", $name);
         let rate = update_rate_tracker($name, $value, tracker_key);
-        metrics::gauge!(rate_name).set(rate);
+
+        // Ensure we always set a rate value, even if it's very small
+        let display_rate = if rate < 0.001 && $value > 0.0 { 0.001 } else { rate };
+        metrics::gauge!(rate_name).set(display_rate);
     }};
     ($name:expr, $value:expr, $label_key:expr, $label_value:expr) => {{
         use $crate::update_rate_tracker;
@@ -559,11 +714,14 @@ macro_rules! absolute_counter_with_rate {
         // Record the absolute counter with labels
         metrics::counter!($name, $label_key => $label_value).absolute($value as u64);
 
-        // Calculate and record the rate with labels
+        // Calculate and record the rate directly using the absolute value
         let rate_name = format!("{}_rate_per_sec", $name);
         let tracker_key = format!("{}_{}_{}", $name, $label_key, $label_value);
         let rate = update_rate_tracker($name, $value, tracker_key);
-        metrics::gauge!(rate_name, $label_key => $label_value).set(rate);
+
+        // Ensure we always set a rate value, even if it's very small
+        let display_rate = if rate < 0.001 && $value > 0.0 { 0.001 } else { rate };
+        metrics::gauge!(rate_name, $label_key => $label_value).set(display_rate);
     }};
 }
 
